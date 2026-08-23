@@ -6,6 +6,11 @@ on:
       - build/bobby-gallery-1.8.2-pack-manager
     paths:
       - '.github/workflows/export-android-build-tools.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/export-android-build-tools.yml'
   workflow_dispatch:
 
 permissions:
