@@ -6,39 +6,55 @@ on:
       - build/bobby-gallery-1.8.2-pack-manager
     paths:
       - '.github/workflows/export-android-build-tools.yml'
-  pull_request:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/export-android-build-tools.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   export:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Ensure Android SDK components
         shell: bash
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la "$ANDROID_HOME/build-tools/35.0.0"
-      - name: Prepare portable tool bundle
+
+      - name: Prepare portable Android tools as text chunks
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p android-tool-bundle
-          cp -a "$ANDROID_HOME/build-tools/35.0.0" android-tool-bundle/build-tools-35.0.0
-          cp "$ANDROID_HOME/platforms/android-35/android.jar" android-tool-bundle/android-35.jar
-      - name: Upload Android tool bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-build-tools-35
-          path: android-tool-bundle
-          retention-days: 1
-          compression-level: 9
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          rm -rf toolbundle toolchunks
+          mkdir -p toolbundle/build-tools/lib toolchunks
+          cp "$BT/aapt2" toolbundle/build-tools/
+          cp "$BT/zipalign" toolbundle/build-tools/
+          cp "$BT/d8" toolbundle/build-tools/
+          cp "$BT/apksigner" toolbundle/build-tools/
+          cp "$BT/lib/d8.jar" toolbundle/build-tools/lib/
+          cp "$BT/lib/apksigner.jar" toolbundle/build-tools/lib/
+          cp "$ANDROID_HOME/platforms/android-35/android.jar" toolbundle/
+          chmod +x toolbundle/build-tools/aapt2 toolbundle/build-tools/zipalign toolbundle/build-tools/d8 toolbundle/build-tools/apksigner
+          tar -czf android-tools.tgz toolbundle
+          base64 -w 0 android-tools.tgz > android-tools.tgz.b64
+          split -b 4000000 -d -a 3 android-tools.tgz.b64 toolchunks/chunk-
+          sha256sum android-tools.tgz > toolchunks/SHA256.txt
+          printf '%s\n' "$(wc -c < android-tools.tgz.b64)" > toolchunks/BASE64_SIZE.txt
+
+      - name: Commit exported chunks to temporary branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f toolchunks
+          git commit -m 'Temporary Android build tool bundle [skip release]'
+          git push origin HEAD:build/bobby-gallery-1.8.2-pack-manager
