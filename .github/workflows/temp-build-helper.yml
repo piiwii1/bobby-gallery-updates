@@ -22,7 +22,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf android-tool-bundle
-          mkdir -p android-tool-bundle/build-tools/lib
+          mkdir -p android-tool-bundle/build-tools/lib android-tool-bundle/build-tools/lib64
           BT="$ANDROID_HOME/build-tools/35.0.0"
           AJ="$ANDROID_HOME/platforms/android-35/android.jar"
           cp "$BT/aapt2" android-tool-bundle/build-tools/
@@ -31,25 +31,25 @@ jobs:
           cp "$BT/apksigner" android-tool-bundle/build-tools/
           cp "$BT/lib/d8.jar" android-tool-bundle/build-tools/lib/
           cp "$BT/lib/apksigner.jar" android-tool-bundle/build-tools/lib/
+          cp "$BT/lib64/libc++.so" android-tool-bundle/build-tools/lib64/
           cp "$AJ" android-tool-bundle/android-35.jar
           chmod +x android-tool-bundle/build-tools/aapt2 android-tool-bundle/build-tools/zipalign android-tool-bundle/build-tools/d8 android-tool-bundle/build-tools/apksigner
       - name: Upload Android tool bundle
         uses: actions/upload-artifact@v4
         with:
-          name: android-build-tools-35
+          name: android-build-tools-35-with-libcxx
           path: android-tool-bundle
           retention-days: 1
           compression-level: 9
-      - name: Publish run id and remove temporary exports
+      - name: Publish run id
         shell: bash
         run: |
           set -euo pipefail
-          git rm -rf temp-tools 2>/dev/null || true
           mkdir -p temp-tools
           printf '%s\n' "$GITHUB_RUN_ID" > temp-tools/run-id.txt
-          printf 'ARTIFACT_READY\n' > temp-tools/status.txt
+          printf 'ARTIFACT_READY_LIBCXX\n' > temp-tools/status.txt
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A temp-tools
-          git commit -m 'Temporary Android SDK artifact ready [skip release]'
+          git commit -m 'Temporary Android SDK artifact with libc++ ready [skip release]'
           git push
