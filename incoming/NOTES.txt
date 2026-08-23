@@ -1,0 +1,1 @@
+Amélioration de la page Catégories : cartes plus compactes, icônes recentrées et meilleure visibilité de la dernière ligne.
