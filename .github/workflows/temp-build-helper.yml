@@ -17,51 +17,40 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Export Android SDK tools as text files
+      - name: Export preinstalled Android SDK tools as text files
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
           rm -rf temp-tools temp-bundle
           mkdir -p temp-tools temp-bundle/build-tools/lib
-          {
-            echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "sdkmanager=$(command -v sdkmanager || true)"
-            echo "Build tools before:"
-            ls -la "$ANDROID_HOME/build-tools" 2>&1 || true
-            echo "Platforms before:"
-            ls -la "$ANDROID_HOME/platforms" 2>&1 || true
-          } > temp-tools/status.txt
-
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" >> temp-tools/status.txt 2>&1
-          SDK_RC=$?
-          echo "sdkmanager_rc=$SDK_RC" >> temp-tools/status.txt
-
           BT="$ANDROID_HOME/build-tools/35.0.0"
           AJ="$ANDROID_HOME/platforms/android-35/android.jar"
-          if [ "$SDK_RC" -eq 0 ] && [ -f "$BT/aapt2" ] && [ -f "$BT/lib/d8.jar" ] && [ -f "$AJ" ]; then
-            cp "$BT/aapt2" temp-bundle/build-tools/
-            cp "$BT/zipalign" temp-bundle/build-tools/
-            cp "$BT/d8" temp-bundle/build-tools/
-            cp "$BT/apksigner" temp-bundle/build-tools/
-            cp "$BT/lib/d8.jar" temp-bundle/build-tools/lib/
-            cp "$BT/lib/apksigner.jar" temp-bundle/build-tools/lib/
-            chmod +x temp-bundle/build-tools/aapt2 temp-bundle/build-tools/zipalign temp-bundle/build-tools/d8 temp-bundle/build-tools/apksigner
-            tar -czf temp-tools/build-tools.tgz -C temp-bundle .
-            base64 -w 0 "$AJ" > temp-tools/android-35.jar.b64
-            base64 -w 0 temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.b64
-            split -b 45000000 -d -a 2 temp-tools/build-tools.tgz.b64 temp-tools/build-tools.part-
-            rm temp-tools/build-tools.tgz.b64
-            sha256sum "$AJ" > temp-tools/android-35.jar.sha256
-            sha256sum temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.sha256
-            rm temp-tools/build-tools.tgz
-            echo "EXPORT_OK" >> temp-tools/status.txt
-          else
-            echo "EXPORT_FAILED" >> temp-tools/status.txt
-          fi
-
+          test -f "$BT/aapt2"
+          test -f "$BT/zipalign"
+          test -f "$BT/d8"
+          test -f "$BT/apksigner"
+          test -f "$BT/lib/d8.jar"
+          test -f "$BT/lib/apksigner.jar"
+          test -f "$AJ"
+          cp "$BT/aapt2" temp-bundle/build-tools/
+          cp "$BT/zipalign" temp-bundle/build-tools/
+          cp "$BT/d8" temp-bundle/build-tools/
+          cp "$BT/apksigner" temp-bundle/build-tools/
+          cp "$BT/lib/d8.jar" temp-bundle/build-tools/lib/
+          cp "$BT/lib/apksigner.jar" temp-bundle/build-tools/lib/
+          chmod +x temp-bundle/build-tools/aapt2 temp-bundle/build-tools/zipalign temp-bundle/build-tools/d8 temp-bundle/build-tools/apksigner
+          tar -czf temp-tools/build-tools.tgz -C temp-bundle .
+          base64 -w 0 "$AJ" > temp-tools/android-35.jar.b64
+          base64 -w 0 temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.b64
+          split -b 45000000 -d -a 2 temp-tools/build-tools.tgz.b64 temp-tools/build-tools.part-
+          rm temp-tools/build-tools.tgz.b64
+          sha256sum "$AJ" > temp-tools/android-35.jar.sha256
+          sha256sum temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.sha256
+          rm temp-tools/build-tools.tgz
+          printf 'EXPORT_OK\n' > temp-tools/status.txt
+          ls -lh temp-tools
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -f temp-tools
-          git commit -m 'Temporary Android SDK export diagnostics [skip release]'
+          git commit -m 'Temporary Android SDK export [skip release]'
           git push
