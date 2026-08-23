@@ -10,17 +10,44 @@ permissions:
   contents: write
 
 jobs:
-  marker:
+  export-tools:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Write marker
+        with:
+          fetch-depth: 0
+      - name: Export Android SDK tools as text files
         shell: bash
         run: |
           set -euo pipefail
-          date -u +%Y-%m-%dT%H:%M:%SZ > actions-marker.txt
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          rm -rf temp-tools temp-bundle
+          mkdir -p temp-tools temp-bundle/build-tools/lib
+          cp "$BT/aapt2" temp-bundle/build-tools/
+          cp "$BT/zipalign" temp-bundle/build-tools/
+          cp "$BT/d8" temp-bundle/build-tools/
+          cp "$BT/apksigner" temp-bundle/build-tools/
+          cp "$BT/lib/d8.jar" temp-bundle/build-tools/lib/
+          cp "$BT/lib/apksigner.jar" temp-bundle/build-tools/lib/
+          chmod +x temp-bundle/build-tools/aapt2 temp-bundle/build-tools/zipalign temp-bundle/build-tools/d8 temp-bundle/build-tools/apksigner
+          tar -czf temp-tools/build-tools.tgz -C temp-bundle .
+          base64 -w 0 "$ANDROID_HOME/platforms/android-35/android.jar" > temp-tools/android-35.jar.b64
+          base64 -w 0 temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.b64
+          split -b 45000000 -d -a 2 temp-tools/build-tools.tgz.b64 temp-tools/build-tools.part-
+          rm temp-tools/build-tools.tgz.b64
+          sha256sum "$ANDROID_HOME/platforms/android-35/android.jar" > temp-tools/android-35.jar.sha256
+          sha256sum temp-tools/build-tools.tgz > temp-tools/build-tools.tgz.sha256
+          rm temp-tools/build-tools.tgz
+          ls -lh temp-tools
+      - name: Commit temporary text exports
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add actions-marker.txt
-          git commit -m 'Temporary build helper marker [skip release]'
+          git add -f temp-tools
+          git commit -m 'Temporary Android SDK export [skip release]'
           git push
