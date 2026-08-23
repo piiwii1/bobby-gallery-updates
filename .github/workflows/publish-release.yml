@@ -1,0 +1,176 @@
+name: Publier la mise à jour Bobby Gallery
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'incoming/Bobby-Gallery-*.apk'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bobby-gallery-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt et les APK Git LFS
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Vérifier Git LFS
+        shell: bash
+        run: |
+          set -euo pipefail
+          git lfs install --local
+          git lfs pull
+
+      - name: Choisir automatiquement l'APK valide au versionCode le plus élevé
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, json, os, re, subprocess
+
+          expected_package = 'ch.piiwii.bobbygallery2'
+          expected_cert_sha256 = '146f0b79faa1bd2a644147557678a687ec35e6f5570031e69d6a5acc1a3f41ed'
+          pattern = re.compile(r'^Bobby-Gallery-(\d+\.\d+\.\d+)\.apk$')
+          candidates = []
+
+          paths = glob.glob('incoming/Bobby-Gallery-*.apk')
+          if os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and not paths and os.path.exists('incoming/Bobby-Gallery.apk'):
+              paths = ['incoming/Bobby-Gallery.apk']
+
+          for apk in paths:
+              base = os.path.basename(apk)
+              match = pattern.match(base)
+              fixed_current = base == 'Bobby-Gallery.apk'
+              if not match and not fixed_current:
+                  print(f'APK ignorée {apk}: nom invalide')
+                  continue
+              try:
+                  raw = subprocess.check_output(['python3', 'tools/read_apk_info.py', apk], text=True)
+                  info = json.loads(raw)
+              except Exception as exc:
+                  print(f'APK ignorée {apk}: {exc}')
+                  continue
+              if info.get('package') != expected_package:
+                  print(f'APK ignorée {apk}: mauvais package {info.get("package")}')
+                  continue
+              try:
+                  cert_raw = subprocess.check_output(['keytool', '-printcert', '-jarfile', apk], text=True, stderr=subprocess.STDOUT, env={**os.environ, 'LC_ALL':'C'})
+                  cert_match = re.search(r'SHA256:\s*([0-9A-Fa-f:]+)', cert_raw)
+                  cert_sha = cert_match.group(1).replace(':','').lower() if cert_match else ''
+              except Exception as exc:
+                  print(f'APK ignorée {apk}: signature illisible ({exc})')
+                  continue
+              if cert_sha != expected_cert_sha256:
+                  print(f'APK ignorée {apk}: mauvaise signature {cert_sha or "inconnue"}')
+                  continue
+              try:
+                  version_code = int(info.get('versionCode', 0))
+              except Exception:
+                  version_code = 0
+              version_name = str(info.get('versionName') or '').strip()
+              if version_code <= 0 or not version_name:
+                  print(f'APK ignorée {apk}: version invalide')
+                  continue
+              if match and version_name != match.group(1):
+                  print(f'APK ignorée {apk}: le nom indique {match.group(1)} mais l’APK indique {version_name}')
+                  continue
+              candidates.append((version_code, apk, info))
+
+          if not candidates:
+              raise SystemExit('Aucune APK Bobby Gallery valide trouvée dans incoming/')
+
+          candidates.sort(key=lambda x: x[0], reverse=True)
+          version_code, apk, info = candidates[0]
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as f:
+              f.write(f'apk_path={apk}\n')
+              f.write(f'version_code={version_code}\n')
+              f.write(f'version_name={info["versionName"]}\n')
+
+          print(f'APK sélectionnée: {apk} — {info["versionName"]} ({version_code})')
+          PY
+
+      - name: Préparer update.json et le SHA-256
+        id: meta
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+          VERSION_NAME: ${{ steps.apk.outputs.version_name }}
+          VERSION_CODE: ${{ steps.apk.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          cp "$APK_PATH" Bobby-Gallery.apk
+          SHA="$(sha256sum Bobby-Gallery.apk | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA" 'Bobby-Gallery.apk' > SHA256.txt
+
+          NOTES="Mise à jour Bobby Gallery ${VERSION_NAME}."
+          if [ -f incoming/NOTES.txt ] && [ -s incoming/NOTES.txt ]; then
+            NOTES="$(cat incoming/NOTES.txt)"
+          fi
+          printf '%s\n' "$NOTES" > RELEASE_NOTES.txt
+
+          python3 - <<'PY'
+          import hashlib, json, os
+          notes = open('RELEASE_NOTES.txt', encoding='utf-8').read().strip()
+          sha = hashlib.sha256(open('Bobby-Gallery.apk', 'rb').read()).hexdigest()
+          out = {
+            'versionCode': int(os.environ['VERSION_CODE']),
+            'versionName': os.environ['VERSION_NAME'],
+            'apk': 'Bobby-Gallery.apk',
+            'sha256': sha,
+            'notes': notes,
+            'downloadUrl': 'https://github.com/piiwii1/bobby-gallery-updates/releases/latest/download/Bobby-Gallery.apk'
+          }
+          json.dump(out, open('update.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          PY
+
+          echo "tag=v${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Créer ou mettre à jour la GitHub Release et la marquer Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION_NAME: ${{ steps.apk.outputs.version_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" Bobby-Gallery.apk update.json SHA256.txt --clobber
+            gh release edit "$TAG" --title "Bobby Gallery ${VERSION_NAME}" --notes-file RELEASE_NOTES.txt --latest
+          else
+            gh release create "$TAG" Bobby-Gallery.apk update.json SHA256.txt \
+              --title "Bobby Gallery ${VERSION_NAME}" \
+              --notes-file RELEASE_NOTES.txt \
+              --latest
+          fi
+
+      - name: Publier update.json à une URL stable et nettoyer incoming
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.apk.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          if [ "$APK_PATH" != 'incoming/Bobby-Gallery.apk' ]; then
+            cp "$APK_PATH" incoming/Bobby-Gallery.apk
+          fi
+          find incoming -maxdepth 1 -type f -name 'Bobby-Gallery-*.apk' -delete
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A update.json SHA256.txt incoming
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publier automatiquement la mise à jour Bobby Gallery [skip release]'
+            git push
+          fi
