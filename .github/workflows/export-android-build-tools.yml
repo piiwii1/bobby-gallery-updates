@@ -1,0 +1,39 @@
+name: Export Android build tools
+
+on:
+  push:
+    branches:
+      - build/bobby-gallery-1.8.2-pack-manager
+    paths:
+      - '.github/workflows/export-android-build-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la "$ANDROID_HOME/build-tools/35.0.0"
+      - name: Prepare portable tool bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-tool-bundle
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" android-tool-bundle/build-tools-35.0.0
+          cp "$ANDROID_HOME/platforms/android-35/android.jar" android-tool-bundle/android-35.jar
+      - name: Upload Android tool bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-tools-35
+          path: android-tool-bundle
+          retention-days: 1
+          compression-level: 9
