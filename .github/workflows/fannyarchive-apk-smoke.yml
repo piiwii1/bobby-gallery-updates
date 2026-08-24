@@ -17,7 +17,7 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Download compiled APK
         run: |
-          curl -fL 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-0b8c-81f4-8520-858e745702ff/raw?se=2026-08-24T12%3A33%3A54Z&sp=r&sv=2026-02-06&sr=b&scid=e1224865-1bf6-5b8d-93ca-40fdebc4eb8b&skoid=1d6acb5b-b3f4-43ec-a5ec-b05c4a7708c8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-24T08%3A22%3A36Z&ske=2026-08-25T08%3A22%3A36Z&sks=b&skv=2026-02-06&sig=W2S7weWAyDFSENAX6VKN5WkrfdSo6nuU2rZJeNxpKsA%3D' -o /tmp/fanny.zip
+          curl -fL 'https://sdmntprpolandcentral.oaiusercontent.com/files/00000000-d9d4-820a-9df4-846d086658a5/raw?se=2026-08-24T12%3A36%3A09Z&sp=r&sv=2026-02-06&sr=b&scid=ad5a394d-12cb-50fb-abeb-9c7a966bd943&skoid=1d6acb5b-b3f4-43ec-a5ec-b05c4a7708c8&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-24T06%3A05%3A35Z&ske=2026-08-25T06%3A05%3A35Z&sks=b&skv=2026-02-06&sig=gXgSUr/BsXLsDv3e%2B7iQtGQhKmf9/5KjvYw/O3ojQCQ%3D' -o /tmp/fanny.zip
           unzip -q /tmp/fanny.zip -d /tmp/fanny
           echo '7bcfcebf496b66ebc030dd36ecedf2ffc4f2a0ab915ae605cd11aca2c393b2d9  /tmp/fanny/FannyArchive-1.3.0-debug.apk' | sha256sum -c -
       - name: Install launch and verify Android 15
