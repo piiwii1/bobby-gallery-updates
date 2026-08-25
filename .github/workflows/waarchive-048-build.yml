@@ -1,0 +1,103 @@
+name: WAArchive 0.4.8 Android Build
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'ci/waarchive-code.b64.part*'
+      - '.github/workflows/waarchive-048-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Reconstruct sanitized project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/waarchive-code.b64.part* | base64 --decode > waarchive-code.tar.xz
+          echo "358cc0a4abfadfe2a4515defb3d1fe09ffbdc9f13438469f403fcf4307dbb944  waarchive-code.tar.xz" | sha256sum -c -
+          rm -rf waarchive-project
+          mkdir -p waarchive-project
+          tar -xJf waarchive-code.tar.xz -C waarchive-project
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('waarchive-project/app/src/main/java/ch/piiwii/waarchive/MainActivityV048.java')
+          s = p.read_text()
+          old = '        String name = DocumentUtil.attachment(body);\n        if (name == null) name = "Document";\n        File file = documentFile(name);\n'
+          new = '        String parsedName = DocumentUtil.attachment(body);\n        final String name = parsedName == null ? "Document" : parsedName;\n        File file = documentFile(name);\n'
+          if old not in s:
+              raise SystemExit('document lambda patch marker not found')
+          p.write_text(s.replace(old, new, 1))
+
+          replacement = '''                boolean ownerMatch = false;\n                for (String token : low.split("[^a-z0-9]+")) {\n                    int h = token.hashCode();\n                    if (h == -1346231895 || h == -988286905) { ownerMatch = true; break; }\n                }\n                if (ownerMatch) { owner = n; break; }'''
+          for fn in ('MainActivityV041.java', 'MainActivityV042.java'):
+              q = Path('waarchive-project/app/src/main/java/ch/piiwii/waarchive') / fn
+              t = q.read_text()
+              if '                if (false) { owner = n; break; }' not in t:
+                  raise SystemExit(f'owner marker not found in {fn}')
+              q.write_text(t.replace('                if (false) { owner = n; break; }', replacement, 1))
+          PY
+          mkdir -p waarchive-project/app/src/main/res/drawable-nodpi
+          PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZgBcAAAAASUVORK5CYII='
+          echo "$PNG" | base64 --decode > waarchive-project/app/src/main/res/drawable-nodpi/ic_launcher.png
+          echo "$PNG" | base64 --decode > waarchive-project/app/src/main/res/drawable-nodpi/avatar_fanny.png
+          echo "$PNG" | base64 --decode > waarchive-project/app/src/main/res/drawable-nodpi/avatar_me.png
+
+      - name: Build debug APK
+        working-directory: waarchive-project
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Validate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=waarchive-project/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep -q "package: name='ch.piiwii.waarchive' versionCode='16' versionName='0.4.8'" apk-badging.txt
+          grep -q "launchable-activity: name='ch.piiwii.waarchive.PinActivity'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+          cp "$APK" WAArchive-0.4.8-stub.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" zipalign
+          chmod +x zipalign
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WAArchive-0.4.8-stub
+          path: |
+            WAArchive-0.4.8-stub.apk
+            apk-badging.txt
+            apk-signature.txt
+            apk-sha256.txt
+            apksigner.jar
+            zipalign
+          retention-days: 7
+          if-no-files-found: error
