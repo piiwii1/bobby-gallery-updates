@@ -16,6 +16,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify and reconstruct anonymized payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '--- remote fragment sizes ---'
+          wc -c waarchive-temp/part0*
+          echo '--- remote fragment hashes ---'
+          sha256sum waarchive-temp/part0*
+          echo '--- expected fragment hashes ---'
+          echo 'part00 5a23ab38f019bb72297f2fac82ff5b0b444e2e65ef9c72242010457a704cd35c'
+          echo 'part01 1725e14a61cc2ce044df0011718b3a2f5214038c900d93a05196bd693ce81141'
+          echo 'part02 9fe0dedf4b89a4ccffe2123cdd32693ca3ff0e3e2a02522612adba9704a30386'
+          echo 'part03 967b9c4409a711da498d2f14a40d151914d57f48f1c353c59411f354c6821b34'
+          echo 'part04 8bb0f9d7ea93bffa31f3fafc0d7f45e7f7adce400dc63c9f15913283352b599e'
+          echo 'part05 42fe9e87a4267e8e4e1e31ed305236c6d7ee306b10d4d1a1bde2f7d185f6e753'
+          mkdir -p waarchive-temp/src waarchive-temp/output
+          cat waarchive-temp/part0* | tr -d '\r\n' | base64 --decode > /tmp/waarchive-public-048.tar.xz
+          sha256sum /tmp/waarchive-public-048.tar.xz
+          echo "53a8a1236c946fa0b22e0cd6a8824bb0490b13b0772b7665a62d56a6cd26ca9a  /tmp/waarchive-public-048.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/waarchive-public-048.tar.xz -C waarchive-temp/src
+          test -f waarchive-temp/src/app/build.gradle
+          test -f waarchive-temp/src/app/src/main/java/ch/piiwii/waarchive/MainActivityV048.java
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -32,17 +55,6 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Reconstruct anonymized source
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p waarchive-temp/src waarchive-temp/output
-          cat waarchive-temp/part0* | tr -d '\r\n' | base64 --decode > /tmp/waarchive-public-048.tar.xz
-          echo "53a8a1236c946fa0b22e0cd6a8824bb0490b13b0772b7665a62d56a6cd26ca9a  /tmp/waarchive-public-048.tar.xz" | sha256sum -c -
-          tar -xJf /tmp/waarchive-public-048.tar.xz -C waarchive-temp/src
-          test -f waarchive-temp/src/app/build.gradle
-          test -f waarchive-temp/src/app/src/main/java/ch/piiwii/waarchive/MainActivityV048.java
 
       - name: Compile anonymized APK
         working-directory: waarchive-temp/src
