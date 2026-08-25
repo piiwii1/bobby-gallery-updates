@@ -1,0 +1,86 @@
+name: WAArchive temporary toolchain build
+
+on:
+  push:
+    branches: [ waarchive-048-temp-build ]
+    paths:
+      - 'waarchive-temp/**'
+      - '.github/workflows/waarchive-temp-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Reconstruct anonymized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p waarchive-temp/src waarchive-temp/output
+          cat waarchive-temp/part0* | tr -d '\r\n' | base64 --decode > /tmp/waarchive-public-048.tar.xz
+          echo "53a8a1236c946fa0b22e0cd6a8824bb0490b13b0772b7665a62d56a6cd26ca9a  /tmp/waarchive-public-048.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/waarchive-public-048.tar.xz -C waarchive-temp/src
+          test -f waarchive-temp/src/app/build.gradle
+          test -f waarchive-temp/src/app/src/main/java/ch/piiwii/waarchive/MainActivityV048.java
+
+      - name: Compile anonymized APK
+        working-directory: waarchive-temp/src
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Validate compiled APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=waarchive-temp/src/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$APK"
+          cp "$APK" waarchive-temp/output/WAArchive-0.4.8-anonymized-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -E "^package:|^sdkVersion:|^targetSdkVersion:" | tee waarchive-temp/output/validation.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "name='ch.piiwii.waarchive'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "versionCode='16'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.4.8'"
+
+      - name: Package portable Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE_BIN="$(readlink -f "$(command -v gradle)")"
+          GRADLE_HOME="$(dirname "$(dirname "$GRADLE_BIN")")"
+          mkdir -p /tmp/waarchive-toolchain/gradle /tmp/waarchive-toolchain/android-sdk /tmp/waarchive-toolchain/gradle-user-home
+          cp -a "$GRADLE_HOME"/. /tmp/waarchive-toolchain/gradle/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" /tmp/waarchive-toolchain/android-sdk/build-tools-35.0.0
+          cp -a "$ANDROID_HOME/platforms/android-35" /tmp/waarchive-toolchain/android-sdk/platform-35
+          cp -a "$ANDROID_HOME/platform-tools" /tmp/waarchive-toolchain/android-sdk/platform-tools
+          cp -a "$HOME/.gradle/caches" /tmp/waarchive-toolchain/gradle-user-home/caches
+          cp -a "$HOME/.gradle/native" /tmp/waarchive-toolchain/gradle-user-home/native 2>/dev/null || true
+          tar -C /tmp -cJf waarchive-temp/output/waarchive-android-toolchain.tar.xz waarchive-toolchain
+          sha256sum waarchive-temp/output/* | tee -a waarchive-temp/output/validation.txt
+
+      - name: Upload compiler bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: waarchive-048-compiler-bundle
+          path: waarchive-temp/output/
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error
