@@ -54,7 +54,6 @@ jobs:
               raise SystemExit('document lambda patch marker not found')
           p.write_text(s.replace(old, new, 1))
 
-          # Restore outgoing-message detection without publishing personal names.
           replacement = '''                boolean ownerMatch = false;\n                for (String token : low.split("[^a-z0-9]+")) {\n                    int h = token.hashCode();\n                    if (h == -1346231895 || h == -988286905) { ownerMatch = true; break; }\n                }\n                if (ownerMatch) { owner = n; break; }'''
           for fn in ('MainActivityV041.java', 'MainActivityV042.java'):
               q = Path('waarchive-project/app/src/main/java/ch/piiwii/waarchive') / fn
@@ -85,6 +84,9 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
           sha256sum "$APK" | tee apk-sha256.txt
           cp "$APK" WAArchive-0.4.8-stub.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" zipalign
+          chmod +x zipalign
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -95,5 +97,7 @@ jobs:
             apk-badging.txt
             apk-signature.txt
             apk-sha256.txt
+            apksigner.jar
+            zipalign
           retention-days: 7
           if-no-files-found: error
