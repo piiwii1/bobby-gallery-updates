@@ -53,6 +53,15 @@ jobs:
           if old not in s:
               raise SystemExit('document lambda patch marker not found')
           p.write_text(s.replace(old, new, 1))
+
+          # Restore outgoing-message detection without publishing personal names.
+          replacement = '''                boolean ownerMatch = false;\n                for (String token : low.split("[^a-z0-9]+")) {\n                    int h = token.hashCode();\n                    if (h == -1346231895 || h == -988286905) { ownerMatch = true; break; }\n                }\n                if (ownerMatch) { owner = n; break; }'''
+          for fn in ('MainActivityV041.java', 'MainActivityV042.java'):
+              q = Path('waarchive-project/app/src/main/java/ch/piiwii/waarchive') / fn
+              t = q.read_text()
+              if '                if (false) { owner = n; break; }' not in t:
+                  raise SystemExit(f'owner marker not found in {fn}')
+              q.write_text(t.replace('                if (false) { owner = n; break; }', replacement, 1))
           PY
           mkdir -p waarchive-project/app/src/main/res/drawable-nodpi
           PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZgBcAAAAASUVORK5CYII='
