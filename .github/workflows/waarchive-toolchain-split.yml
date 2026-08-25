@@ -1,0 +1,91 @@
+name: WAArchive split offline toolchain
+
+on:
+  push:
+    branches: [ waarchive-048-temp-build ]
+    paths:
+      - '.github/workflows/waarchive-toolchain-split.yml'
+  workflow_dispatch:
+
+jobs:
+  split-toolchain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct anonymized source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p waarchive-temp/src
+          cat waarchive-temp/part0* | tr -d '\r\n' | base64 --decode > /tmp/waarchive-public-048.tar.xz
+          echo "53a8a1236c946fa0b22e0cd6a8824bb0490b13b0772b7665a62d56a6cd26ca9a  /tmp/waarchive-public-048.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/waarchive-public-048.tar.xz -C waarchive-temp/src
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Warm dependency cache and compile
+        working-directory: waarchive-temp/src
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Prepare split toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE_BIN="$(readlink -f "$(command -v gradle)")"
+          GRADLE_HOME="$(dirname "$(dirname "$GRADLE_BIN")")"
+          mkdir -p /tmp/toolchain-gradle /tmp/toolchain-sdk /tmp/toolchain-cache
+          cp -a "$GRADLE_HOME"/. /tmp/toolchain-gradle/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" /tmp/toolchain-sdk/build-tools-35.0.0
+          cp -a "$ANDROID_HOME/platforms/android-35" /tmp/toolchain-sdk/platform-35
+          cp -a "$ANDROID_HOME/platform-tools" /tmp/toolchain-sdk/platform-tools
+          cp -a "$HOME/.gradle/caches/modules-2" /tmp/toolchain-cache/modules-2
+          du -sh /tmp/toolchain-gradle /tmp/toolchain-sdk /tmp/toolchain-cache
+          tar -C /tmp -cf /tmp/toolchain-gradle.tar toolchain-gradle
+          tar -C /tmp -cf /tmp/toolchain-sdk.tar toolchain-sdk
+          tar -C /tmp -cf /tmp/toolchain-cache.tar toolchain-cache
+          sha256sum /tmp/toolchain-*.tar
+
+      - name: Upload Gradle
+        uses: actions/upload-artifact@v4
+        with:
+          name: waarchive-toolchain-gradle
+          path: /tmp/toolchain-gradle.tar
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Upload Android SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: waarchive-toolchain-sdk
+          path: /tmp/toolchain-sdk.tar
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Upload Gradle dependency cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: waarchive-toolchain-cache
+          path: /tmp/toolchain-cache.tar
+          retention-days: 2
+          compression-level: 0
+          if-no-files-found: error
