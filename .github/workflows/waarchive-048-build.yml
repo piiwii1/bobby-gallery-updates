@@ -44,6 +44,16 @@ jobs:
           rm -rf waarchive-project
           mkdir -p waarchive-project
           tar -xJf waarchive-code.tar.xz -C waarchive-project
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('waarchive-project/app/src/main/java/ch/piiwii/waarchive/MainActivityV048.java')
+          s = p.read_text()
+          old = '        String name = DocumentUtil.attachment(body);\n        if (name == null) name = "Document";\n        File file = documentFile(name);\n'
+          new = '        String parsedName = DocumentUtil.attachment(body);\n        final String name = parsedName == null ? "Document" : parsedName;\n        File file = documentFile(name);\n'
+          if old not in s:
+              raise SystemExit('document lambda patch marker not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
           mkdir -p waarchive-project/app/src/main/res/drawable-nodpi
           PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZgBcAAAAASUVORK5CYII='
           echo "$PNG" | base64 --decode > waarchive-project/app/src/main/res/drawable-nodpi/ic_launcher.png
