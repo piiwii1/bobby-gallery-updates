@@ -72,29 +72,30 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-      - name: Package portable Android toolchain fast
+      - name: Package minimal offline toolchain
         shell: bash
         run: |
           set -euo pipefail
           GRADLE_BIN="$(readlink -f "$(command -v gradle)")"
           GRADLE_HOME="$(dirname "$(dirname "$GRADLE_BIN")")"
-          mkdir -p /tmp/waarchive-toolchain/gradle /tmp/waarchive-toolchain/android-sdk /tmp/waarchive-toolchain/gradle-user-home
+          mkdir -p /tmp/waarchive-toolchain/gradle /tmp/waarchive-toolchain/android-sdk /tmp/waarchive-toolchain/gradle-user-home/caches
           cp -a "$GRADLE_HOME"/. /tmp/waarchive-toolchain/gradle/
           cp -a "$ANDROID_HOME/build-tools/35.0.0" /tmp/waarchive-toolchain/android-sdk/build-tools-35.0.0
           cp -a "$ANDROID_HOME/platforms/android-35" /tmp/waarchive-toolchain/android-sdk/platform-35
           cp -a "$ANDROID_HOME/platform-tools" /tmp/waarchive-toolchain/android-sdk/platform-tools
-          cp -a "$HOME/.gradle/caches" /tmp/waarchive-toolchain/gradle-user-home/caches
-          cp -a "$HOME/.gradle/native" /tmp/waarchive-toolchain/gradle-user-home/native 2>/dev/null || true
-          tar -C /tmp -cf waarchive-temp/output/waarchive-android-toolchain.tar waarchive-toolchain
-          sha256sum waarchive-temp/output/waarchive-android-toolchain.tar | tee -a waarchive-temp/output/validation.txt
+          cp -a "$HOME/.gradle/caches/modules-2" /tmp/waarchive-toolchain/gradle-user-home/caches/
+          du -sh /tmp/waarchive-toolchain/* /tmp/waarchive-toolchain/gradle-user-home/caches/modules-2 | tee waarchive-temp/output/toolchain-sizes.txt
+          tar -C /tmp -cf waarchive-temp/output/waarchive-android-toolchain-minimal.tar waarchive-toolchain
+          sha256sum waarchive-temp/output/waarchive-android-toolchain-minimal.tar | tee -a waarchive-temp/output/validation.txt
 
       - name: Upload compiler bundle
         uses: actions/upload-artifact@v4
         with:
-          name: waarchive-048-compiler-bundle
+          name: waarchive-048-compiler-bundle-minimal
           path: |
-            waarchive-temp/output/waarchive-android-toolchain.tar
+            waarchive-temp/output/waarchive-android-toolchain-minimal.tar
             waarchive-temp/output/validation.txt
+            waarchive-temp/output/toolchain-sizes.txt
           retention-days: 2
           compression-level: 0
           if-no-files-found: error
