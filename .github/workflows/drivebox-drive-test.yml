@@ -1,0 +1,15 @@
+name: DriveBox Drive Access Test
+on:
+  push:
+    branches: [ drivebox-rc31-builder-temp ]
+    paths: [ '.github/workflows/drivebox-drive-test.yml' ]
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Try canonical DriveBox RC31 download
+        run: |
+          python3 -m pip install --quiet 'gdown==5.2.0'
+          gdown --fuzzy 'https://drive.google.com/file/d/1Dj3t8sp89MiJLxGMCQzTb40xxzbl1Bay/view?usp=drivesdk' -O /tmp/source.zip
+          ls -l /tmp/source.zip
+          echo '9540d7d1094c5ae14c967cf1981a835e5cc1dca3057e04a1466b45f6e1d4d45b  /tmp/source.zip' | sha256sum -c -
