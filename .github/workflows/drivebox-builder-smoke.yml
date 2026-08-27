@@ -1,19 +1,87 @@
 name: DriveBox Builder Smoke
+
 on:
   push:
     branches: [ drivebox-rc31-builder-temp ]
+    paths:
+      - 'drivebox-builder/TRIGGER'
+
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   smoke:
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
-      - name: Generate temporary RSA keypair
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Recover temporary private key
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           mkdir -p /tmp/drivebox-key
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/drivebox-key/private.pem
-          openssl pkey -in /tmp/drivebox-key/private.pem -pubout -out /tmp/drivebox-key/public.pem
-      - name: Upload temporary keypair
+          gh run download 33025410502 -n drivebox-builder-keypair -D /tmp/drivebox-key
+          test -s /tmp/drivebox-key/private.pem
+
+      - name: Reconstruct and decrypt RC31 source
+        run: |
+          set -euo pipefail
+          cat drivebox-builder/payload/part*.txt | tr -d '\r\n' | base64 --decode > /tmp/DriveBox-RC31-source.enc
+          echo '6bc36e4492fa4a0658c5f097b1a7280a1f2882970aecf011daf964b22f2e69a9  /tmp/DriveBox-RC31-source.enc' | sha256sum -c -
+          tr -d '\r\n' < drivebox-builder/keyiv.enc.b64 | base64 --decode > /tmp/keyiv.enc
+          openssl pkeyutl -decrypt -inkey /tmp/drivebox-key/private.pem -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -in /tmp/keyiv.enc -out /tmp/keyiv.bin
+          head -c 32 /tmp/keyiv.bin > /tmp/aes.key
+          tail -c 16 /tmp/keyiv.bin > /tmp/aes.iv
+          KEYHEX=$(od -An -v -tx1 /tmp/aes.key | tr -d ' \n')
+          IVHEX=$(od -An -v -tx1 /tmp/aes.iv | tr -d ' \n')
+          openssl enc -d -aes-256-cbc -K "$KEYHEX" -iv "$IVHEX" -in /tmp/DriveBox-RC31-source.enc -out /tmp/DriveBox-1.0.0-RC31-source.zip
+          echo '9540d7d1094c5ae14c967cf1981a835e5cc1dca3057e04a1466b45f6e1d4d45b  /tmp/DriveBox-1.0.0-RC31-source.zip' | sha256sum -c -
+          mkdir -p /tmp/drivebox-src
+          unzip -q /tmp/DriveBox-1.0.0-RC31-source.zip -d /tmp/drivebox-src
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build signed RC31 APK
+        working-directory: /tmp/drivebox-src
+        run: gradle --no-daemon --max-workers=2 :app:assembleDebug
+
+      - name: Verify and package
+        run: |
+          set -euo pipefail
+          APK=/tmp/drivebox-src/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee /tmp/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/APK-BADGING.txt
+          grep -q "package: name='ch.clubvwsuisse.drivebox.v1' versionCode='40' versionName='1.0.0-rc31'" /tmp/APK-BADGING.txt
+          mkdir -p /tmp/drivebox-out
+          cp "$APK" /tmp/drivebox-out/DriveBox-1.0.0-RC31.apk
+          cp /tmp/DriveBox-1.0.0-RC31-source.zip /tmp/drivebox-out/DriveBox-1.0.0-RC31-source.zip
+          cp /tmp/APK-SIGNATURE.txt /tmp/drivebox-out/
+          cp /tmp/APK-BADGING.txt /tmp/drivebox-out/
+          sha256sum /tmp/drivebox-out/DriveBox-1.0.0-RC31.apk /tmp/drivebox-out/DriveBox-1.0.0-RC31-source.zip > /tmp/drivebox-out/SHA256SUMS.txt
+
+      - name: Upload DriveBox RC31
         uses: actions/upload-artifact@v4
         with:
-          name: drivebox-builder-keypair
-          path: /tmp/drivebox-key/
-          retention-days: 1
+          name: DriveBox-1.0.0-RC31
+          path: /tmp/drivebox-out/
+          retention-days: 7
