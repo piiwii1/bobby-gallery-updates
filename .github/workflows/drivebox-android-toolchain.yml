@@ -38,6 +38,9 @@ jobs:
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
           rootProject.name='Warm'; include ':app'
           EOF
+          cat > /tmp/warm/gradle.properties <<'EOF'
+          android.useAndroidX=true
+          EOF
           cat > /tmp/warm/build.gradle <<'EOF'
           plugins { id 'com.android.application' version '8.7.3' apply false }
           EOF
