@@ -1,0 +1,81 @@
+name: DriveBox Android Toolchain
+on:
+  push:
+    branches: [ drivebox-rc31-builder-temp ]
+    paths:
+      - '.github/workflows/drivebox-android-toolchain.yml'
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Install portable Gradle 8.9
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --retry 3 -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          mkdir -p /tmp/drivebox-toolchain
+          unzip -q /tmp/gradle.zip -d /tmp/drivebox-toolchain
+      - name: Warm exact DriveBox dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/warm && mkdir -p /tmp/warm/app/src/main/java/test/warm
+          cat > /tmp/warm/settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='Warm'; include ':app'
+          EOF
+          cat > /tmp/warm/build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > /tmp/warm/app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android { namespace 'test.warm'; compileSdk 35; defaultConfig { applicationId 'test.warm'; minSdk 23; targetSdk 35; versionCode 1; versionName '1' } }
+          dependencies { implementation 'androidx.core:core:1.15.0'; implementation 'com.journeyapps:zxing-android-embedded:4.3.0' }
+          EOF
+          cat > /tmp/warm/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          EOF
+          mkdir -p /tmp/warm/app/src/main/res/values
+          cat > /tmp/warm/app/src/main/res/values/styles.xml <<'EOF'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"/></resources>
+          EOF
+          cat > /tmp/warm/app/src/main/java/test/warm/MainActivity.java <<'EOF'
+          package test.warm; public class MainActivity extends android.app.Activity {}
+          EOF
+          /tmp/drivebox-toolchain/gradle-8.9/bin/gradle -p /tmp/warm --no-daemon :app:assembleDebug
+      - name: Build portable bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/drivebox-toolchain
+          mkdir -p "$ROOT/android-sdk/platforms" "$ROOT/android-sdk/build-tools" "$ROOT/android-sdk/platform-tools" "$ROOT/android-sdk/licenses" "$ROOT/gradle-home"
+          cp -a "$ANDROID_HOME/platforms/android-35" "$ROOT/android-sdk/platforms/"
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" "$ROOT/android-sdk/build-tools/"
+          cp -a "$ANDROID_HOME/platform-tools/." "$ROOT/android-sdk/platform-tools/"
+          cp -a "$ANDROID_HOME/licenses/." "$ROOT/android-sdk/licenses/" || true
+          cp -a "$HOME/.gradle/caches" "$ROOT/gradle-home/"
+          tar -C /tmp -czf /tmp/DriveBox-Android-Toolchain.tar.gz drivebox-toolchain
+          ls -lh /tmp/DriveBox-Android-Toolchain.tar.gz
+          sha256sum /tmp/DriveBox-Android-Toolchain.tar.gz > /tmp/DriveBox-Android-Toolchain.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DriveBox-Android-Toolchain
+          path: |
+            /tmp/DriveBox-Android-Toolchain.tar.gz
+            /tmp/DriveBox-Android-Toolchain.sha256
+          retention-days: 1
+          compression-level: 0
