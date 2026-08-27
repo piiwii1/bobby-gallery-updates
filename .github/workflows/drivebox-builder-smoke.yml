@@ -6,4 +6,14 @@ jobs:
   smoke:
     runs-on: ubuntu-22.04
     steps:
-      - run: echo DRIVEBOX_BUILDER_OK
+      - name: Generate temporary RSA keypair
+        run: |
+          mkdir -p /tmp/drivebox-key
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out /tmp/drivebox-key/private.pem
+          openssl pkey -in /tmp/drivebox-key/private.pem -pubout -out /tmp/drivebox-key/public.pem
+      - name: Upload temporary keypair
+        uses: actions/upload-artifact@v4
+        with:
+          name: drivebox-builder-keypair
+          path: /tmp/drivebox-key/
+          retention-days: 1
