@@ -1,0 +1,9 @@
+name: DriveBox Builder Smoke
+on:
+  push:
+    branches: [ drivebox-rc31-builder-temp ]
+jobs:
+  smoke:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo DRIVEBOX_BUILDER_OK
