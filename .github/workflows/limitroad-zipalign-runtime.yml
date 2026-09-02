@@ -1,0 +1,25 @@
+name: LimitRoad zipalign runtime
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-zipalign-runtime.yml' ]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate libc++
+        run: |
+          set -e
+          mkdir -p out
+          LIB=$(find "$ANDROID_HOME" /usr/local/lib /usr/lib -name 'libc++.so' -type f 2>/dev/null | head -1)
+          echo "LIB=$LIB"
+          test -n "$LIB"
+          cp "$LIB" out/libc++.so
+          ldd "$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 -name zipalign -type f | sort -V | tail -1)" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-zipalign-runtime
+          path: out/libc++.so
+          retention-days: 7
