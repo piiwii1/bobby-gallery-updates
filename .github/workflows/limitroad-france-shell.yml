@@ -1,0 +1,36 @@
+name: LimitRoad France Android shell
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-france-shell.yml' ]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: limitroad-france-rebuild-20260902
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build release shell
+        working-directory: limitroad-france-rebuild/android-shell
+        run: gradle --no-daemon assembleRelease
+      - name: Collect shell APK
+        run: |
+          mkdir -p out
+          cp limitroad-france-rebuild/android-shell/app/build/outputs/apk/release/app-release-unsigned.apk out/LimitRoad-France-shell-unsigned.apk
+          unzip -l out/LimitRoad-France-shell-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-France-shell-unsigned
+          path: out/LimitRoad-France-shell-unsigned.apk
+          retention-days: 7
+          compression-level: 0
