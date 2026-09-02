@@ -1,0 +1,32 @@
+name: LimitRoad Redeliver Switzerland
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-redeliver-switzerland.yml' ]
+  workflow_dispatch:
+permissions:
+  actions: read
+jobs:
+  redeliver:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download original Switzerland artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          RUN=32562000458
+          NAME='LimitRoad-Switzerland-Full-DB-2026-08-22'
+          API="https://api.github.com/repos/piiwii1/wpab-builds/actions/runs/${RUN}/artifacts?per_page=100"
+          URL=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "$API" | jq -r --arg n "$NAME" '.artifacts[] | select(.name==$n) | .archive_download_url' | head -1)
+          if [ -z "$URL" ] || [ "$URL" = null ]; then
+            echo 'Original DB artifact expired; rebuilding from current Switzerland extract'
+            exit 2
+          fi
+          curl -fL -H "Authorization: Bearer ${GH_TOKEN}" -H 'Accept: application/vnd.github+json' "$URL" -o db.zip
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: LimitRoad-Switzerland-original-db
+          path: db.zip
+          retention-days: 7
