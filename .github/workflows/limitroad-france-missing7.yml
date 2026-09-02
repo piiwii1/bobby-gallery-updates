@@ -1,0 +1,78 @@
+name: LimitRoad France missing 7 regions
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-france-missing7.yml' ]
+permissions:
+  contents: read
+jobs:
+  build-region:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        region:
+          - midi-pyrenees
+          - nord-pas-de-calais
+          - pays-de-la-loire
+          - picardie
+          - poitou-charentes
+          - provence-alpes-cote-d-azur
+          - rhone-alpes
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: limitroad-france-rebuild-20260902
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install generator dependency
+        run: python -m pip install --disable-pip-version-check osmium==4.3.1
+      - name: Apply recovered access filter
+        shell: bash
+        run: |
+          python - <<'PY'
+          p='limitroad-france-rebuild/generate_region.py'
+          s=open(p,encoding='utf-8').read()
+          needle="        if highway not in ALLOWED_HIGHWAYS:\n            return\n"
+          repl=needle+"        if (w.tags.get('access') or '').lower() in ('private','no'):\n            return\n"
+          if needle not in s:
+              raise SystemExit('generator patch anchor missing')
+          open(p,'w',encoding='utf-8').write(s.replace(needle,repl,1))
+          PY
+      - name: Download Geofabrik region
+        shell: bash
+        run: |
+          curl -fL --retry 6 --retry-delay 10 --connect-timeout 30 \
+            "https://download.geofabrik.de/europe/france/${{ matrix.region }}-latest.osm.pbf" \
+            -o region.osm.pbf
+      - name: Generate compact LimitRoad database
+        shell: bash
+        run: |
+          mkdir -p out
+          python limitroad-france-rebuild/generate_region.py \
+            region.osm.pbf "out/${{ matrix.region }}.sqlite" "${{ matrix.region }}" \
+            --data-version 02.09.2026
+      - name: Validate SQLite database
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, sqlite3
+          r='${{ matrix.region }}'
+          p=f'out/{r}.sqlite'
+          con=sqlite3.connect(p)
+          assert con.execute('pragma integrity_check').fetchone()[0]=='ok'
+          tables={x[0] for x in con.execute("select name from sqlite_master where type='table'")}
+          assert {'metadata','roads','segments'} <= tables
+          roads=con.execute('select count(*) from roads').fetchone()[0]
+          segs=con.execute('select count(*) from segments').fetchone()[0]
+          assert roads>1000 and segs>1000
+          print(r, os.path.getsize(p), roads, segs)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-France-${{ matrix.region }}-20260902
+          path: out/${{ matrix.region }}.sqlite
+          retention-days: 7
+          compression-level: 0
