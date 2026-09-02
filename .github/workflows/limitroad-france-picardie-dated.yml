@@ -1,0 +1,53 @@
+name: LimitRoad France Picardie dated mirror
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-france-picardie-dated.yml' ]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: limitroad-france-rebuild-20260902
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install --disable-pip-version-check osmium==4.3.1
+      - name: Patch access filter
+        run: |
+          python - <<'PY'
+          p='limitroad-france-rebuild/generate_region.py'
+          s=open(p,encoding='utf-8').read()
+          needle="        if highway not in ALLOWED_HIGHWAYS:\n            return\n"
+          repl=needle+"        if (w.tags.get('access') or '').lower() in ('private','no'):\n            return\n"
+          open(p,'w',encoding='utf-8').write(s.replace(needle,repl,1))
+          PY
+      - name: Download dated Picardie extract
+        run: |
+          set -e
+          URL1='https://download-ext2.geofabrik.de/europe/france/picardie-260828.osm.pbf'
+          URL2='https://download.geofabrik.de/europe/france/picardie-260828.osm.pbf'
+          wget --timeout=120 --tries=3 -O picardie.osm.pbf "$URL1" || wget --timeout=120 --tries=3 -O picardie.osm.pbf "$URL2"
+          test $(stat -c%s picardie.osm.pbf) -gt 100000000
+      - name: Generate and validate Picardie
+        run: |
+          mkdir -p out
+          python limitroad-france-rebuild/generate_region.py picardie.osm.pbf out/picardie.sqlite picardie --data-version 02.09.2026
+          python - <<'PY'
+          import sqlite3,os
+          p='out/picardie.sqlite'; c=sqlite3.connect(p)
+          assert c.execute('pragma integrity_check').fetchone()[0]=='ok'
+          r=c.execute('select count(*) from roads').fetchone()[0]; s=c.execute('select count(*) from segments').fetchone()[0]
+          assert r>1000 and s>1000
+          print(os.path.getsize(p),r,s)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-France-picardie-dated-20260902
+          path: out/picardie.sqlite
+          retention-days: 7
+          compression-level: 0
