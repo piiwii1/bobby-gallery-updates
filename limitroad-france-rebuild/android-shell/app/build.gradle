@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ch.piiwii.limitroad.map.fr'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ch.piiwii.limitroad.map.fr'
+        minSdk 26
+        targetSdk 35
+        versionCode 20260902
+        versionName '02.09.2026'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*']
+        }
+    }
+}
