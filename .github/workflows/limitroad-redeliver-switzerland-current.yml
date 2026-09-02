@@ -1,0 +1,91 @@
+name: LimitRoad Redeliver Switzerland Current
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-redeliver-switzerland-current.yml' ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Install deps
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          sudo apt-get update -qq
+          sudo apt-get install -y osmium-tool
+      - name: Download Switzerland OSM
+        run: curl -fL --retry 5 https://download.geofabrik.de/europe/switzerland-latest.osm.pbf -o switzerland.osm.pbf
+      - name: Build compact SQLite
+        run: |
+          python3 - <<'PY'
+          import sqlite3, subprocess, os, math
+          subprocess.check_call(['osmium','tags-filter','switzerland.osm.pbf','w/highway=motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,unclassified,residential,living_street,service,road','-o','roads.osm.pbf','--overwrite'])
+          # Export GeoJSON sequence; simple compatibility database for current LimitRoad provider schema.
+          subprocess.check_call(['osmium','export','roads.osm.pbf','-f','geojsonseq','-o','roads.geojsonseq','--overwrite'])
+          import json
+          con=sqlite3.connect('switzerland.sqlite'); c=con.cursor()
+          c.executescript('CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE segments(way_id INTEGER,name TEXT,highway TEXT,oneway TEXT,maxspeed INTEGER,maxspeed_forward INTEGER,maxspeed_backward INTEGER,lat1 REAL,lon1 REAL,lat2 REAL,lon2 REAL,min_lat REAL,max_lat REAL,min_lon REAL,max_lon REAL,tile_x INTEGER,tile_y INTEGER); CREATE INDEX idx_tile ON segments(tile_x,tile_y);')
+          n=0
+          def sp(v):
+            if v is None:return 0
+            s=str(v).lower(); import re
+            m=re.search(r'\d+',s)
+            return int(m.group()) if m else 0
+          with open('roads.geojsonseq',errors='ignore') as f:
+            for line in f:
+              line=line.strip().lstrip('\x1e')
+              if not line: continue
+              try:o=json.loads(line)
+              except:continue
+              g=o.get('geometry') or {}; p=o.get('properties') or {}
+              if g.get('type')!='LineString':continue
+              coords=g.get('coordinates') or []
+              if len(coords)<2:continue
+              wayid=int(p.get('@id','w0')[1:] if str(p.get('@id','w0')).startswith('w') else 0)
+              ms=sp(p.get('maxspeed')); mf=sp(p.get('maxspeed:forward')) or ms; mb=sp(p.get('maxspeed:backward')) or ms
+              for a,b in zip(coords,coords[1:]):
+                lon1,lat1=a[:2]; lon2,lat2=b[:2]
+                tx=int(math.floor((min(lon1,lon2)+180)*100)); ty=int(math.floor((min(lat1,lat2)+90)*100))
+                c.execute('INSERT INTO segments VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(wayid,p.get('name'),p.get('highway'),p.get('oneway',''),ms,mf,mb,lat1,lon1,lat2,lon2,min(lat1,lat2),max(lat1,lat2),min(lon1,lon2),max(lon1,lon2),tx,ty)); n+=1
+                if n%100000==0: con.commit()
+          c.executemany('INSERT INTO metadata VALUES(?,?)',[('country','CH'),('source','OpenStreetMap / Geofabrik'),('data_version','02.09.2026'),('segments',str(n))]); con.commit(); con.execute('VACUUM'); con.close(); print('segments',n)
+          PY
+      - name: Build Android APK
+        run: |
+          mkdir -p p/app/src/main/java/ch/piiwii/limitroad/map/ch p/app/src/main/assets
+          cp switzerland.sqlite p/app/src/main/assets/
+          cat > p/settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='LimitRoadSwitzerlandMap'; include ':app'
+          EOF
+          cat > p/build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > p/app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android { namespace 'ch.piiwii.limitroad.map.ch'; compileSdk 35
+            defaultConfig { applicationId 'ch.piiwii.limitroad.map.ch'; minSdk 26; targetSdk 35; versionCode 20260902; versionName '02.09.2026' }
+          }
+          EOF
+          cat > p/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="LimitRoad – Carte Suisse" android:allowBackup="false"><provider android:name=".SwissMapProvider" android:authorities="ch.piiwii.limitroad.map.ch.provider" android:exported="true"/></application></manifest>
+          EOF
+          cat > p/app/src/main/java/ch/piiwii/limitroad/map/ch/SwissMapProvider.java <<'EOF'
+          package ch.piiwii.limitroad.map.ch;
+          import android.content.*; import android.database.*; import android.database.sqlite.*; import android.net.*; import java.io.*;
+          public final class SwissMapProvider extends ContentProvider { SQLiteDatabase db; public boolean onCreate(){try{File o=new File(getContext().getNoBackupFilesDir(),"switzerland.sqlite"); if(!o.exists()){try(InputStream i=getContext().getAssets().open("switzerland.sqlite");OutputStream s=new FileOutputStream(o)){i.transferTo(s);}} db=SQLiteDatabase.openDatabase(o.getPath(),null,SQLiteDatabase.OPEN_READONLY);return true;}catch(Exception e){return false;}} public Cursor query(Uri u,String[] p,String s,String[] a,String so){if(db==null||!"nearby".equals(u.getLastPathSegment()))return null; double lat=d(u,"lat"),lon=d(u,"lon"),r=Math.max(50,Math.min(1500,d(u,"radius"))); double dl=r/111320.0,do_=r/(111320.0*Math.max(.2,Math.cos(Math.toRadians(lat)))); int minX=(int)Math.floor((lon-do_+180)*100),maxX=(int)Math.floor((lon+do_+180)*100),minY=(int)Math.floor((lat-dl+90)*100),maxY=(int)Math.floor((lat+dl+90)*100); return db.query("segments",p,"tile_x between ? and ? and tile_y between ? and ? and max_lat>=? and min_lat<=? and max_lon>=? and min_lon<=?",new String[]{""+minX,""+maxX,""+minY,""+maxY,""+(lat-dl),""+(lat+dl),""+(lon-do_),""+(lon+do_)},null,null,null,"2500");} static double d(Uri u,String k){try{return Double.parseDouble(u.getQueryParameter(k));}catch(Exception e){return 0;}} public String getType(Uri u){return "vnd.android.cursor.dir/vnd.limitroad.roadsegment";} public Uri insert(Uri u,ContentValues v){throw new UnsupportedOperationException();} public int delete(Uri u,String s,String[] a){throw new UnsupportedOperationException();} public int update(Uri u,ContentValues v,String s,String[] a){throw new UnsupportedOperationException();} }
+          EOF
+          cd p && gradle :app:assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../LimitRoad-Map-Suisse-02.09.2026.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-Map-Suisse-02.09.2026
+          path: LimitRoad-Map-Suisse-02.09.2026.apk
+          retention-days: 7
