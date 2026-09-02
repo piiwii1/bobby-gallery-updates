@@ -1,0 +1,64 @@
+name: LimitRoad Redeliver France Assemble Only
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-redeliver-france-assemble-only.yml' ]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: limitroad-france-rebuild-20260902 }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fr-*
+          path: db
+          merge-multiple: true
+          repository: piiwii1/bobby-gallery-updates
+          run-id: 33673872722
+          github-token: ${{ github.token }}
+      - name: Verify 22 databases
+        run: |
+          test "$(find db -name '*.sqlite' | wc -l)" -eq 22
+          python3 - <<'PY'
+          import glob,sqlite3
+          for p in sorted(glob.glob('db/*.sqlite')):
+              c=sqlite3.connect(p); assert c.execute('pragma integrity_check').fetchone()[0]=='ok'; c.close(); print('OK',p)
+          PY
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build shell
+        run: |
+          cd limitroad-france-rebuild/android-shell
+          gradle :app:assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../../shell.apk
+          test -f ../../shell.apk
+      - name: Assemble France APK
+        run: |
+          rm -rf apkdir && mkdir apkdir
+          (cd apkdir && unzip -q ../shell.apk)
+          rm -rf apkdir/META-INF apkdir/classes.dex
+          base64 -d limitroad-france-rebuild/FranceMapProvider.classes.dex.b64 > apkdir/classes.dex
+          mkdir -p apkdir/assets/regions
+          cp db/*.sqlite apkdir/assets/regions/
+          rm -f LimitRoad-Map-France-02.09.2026-unsigned.apk
+          (cd apkdir && zip -1 -q -r ../LimitRoad-Map-France-02.09.2026-unsigned.apk .)
+          unzip -tq LimitRoad-Map-France-02.09.2026-unsigned.apk
+          test "$(unzip -Z1 LimitRoad-Map-France-02.09.2026-unsigned.apk | grep '^assets/regions/.*\.sqlite$' | wc -l)" -eq 22
+          sha256sum LimitRoad-Map-France-02.09.2026-unsigned.apk
+          ls -lh LimitRoad-Map-France-02.09.2026-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-Map-France-02.09.2026-unsigned
+          path: LimitRoad-Map-France-02.09.2026-unsigned.apk
+          retention-days: 7
+          compression-level: 0
