@@ -1,0 +1,70 @@
+name: LimitRoad France generator smoke test
+
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths:
+      - '.github/workflows/limitroad-france-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: limitroad-france-rebuild-20260902
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install generator dependency
+        run: python -m pip install --disable-pip-version-check osmium==4.3.1
+      - name: Download historic Alsace extract
+        run: |
+          set -euxo pipefail
+          URL='https://download.geofabrik.de/europe/france/alsace-260820.osm.pbf'
+          if ! curl -fL --retry 4 --retry-delay 5 "$URL" -o alsace.osm.pbf; then
+            curl -fL --retry 4 --retry-delay 5 'https://download.geofabrik.de/europe/france/alsace-latest.osm.pbf' -o alsace.osm.pbf
+          fi
+          ls -lh alsace.osm.pbf
+      - name: Generate compact database
+        run: |
+          mkdir -p out
+          python limitroad-france-rebuild/generate_region.py alsace.osm.pbf out/alsace.sqlite alsace --data-version 02.09.2026
+      - name: Compare structure with recovered original
+        run: |
+          python - <<'PY'
+          import sqlite3, hashlib, json, os
+          p='out/alsace.sqlite'; c=sqlite3.connect(p)
+          roads=c.execute('select count(*) from roads').fetchone()[0]
+          segs=c.execute('select count(*) from segments').fetchone()[0]
+          speed=c.execute('select count(*) from roads where maxspeed>0').fetchone()[0]
+          hs=c.execute('select highway,count(*) from roads group by highway order by highway').fetchall()
+          sha=hashlib.sha256(open(p,'rb').read()).hexdigest()
+          expected={'roads':155067,'segments':409296,'sha256':'b736f738dbd0a2e12ddcdd1a5bab13532bf156d4ebd41d975b1ea0e779092213'}
+          report={'generated':{'roads':roads,'segments':segs,'speed_roads':speed,'sha256':sha,'size':os.path.getsize(p)},'original_20260822':expected,'highways':hs}
+          open('SMOKE-REPORT.json','w').write(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+          sha256sum out/alsace.sqlite > out/alsace.sqlite.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-France-generator-smoke
+          path: |
+            out/alsace.sqlite
+            out/alsace.sqlite.sha256
+            SMOKE-REPORT.json
+          retention-days: 7
+      - name: Publish run locator
+        if: always()
+        run: |
+          printf 'run_id=%s\nrun_attempt=%s\nstatus=completed\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > LIMITROAD-FRANCE-SMOKE-RUN.txt
+          git config user.name 'LimitRoad Recovery'
+          git config user.email 'actions@users.noreply.github.com'
+          git add LIMITROAD-FRANCE-SMOKE-RUN.txt
+          git commit -m "LimitRoad France smoke run $GITHUB_RUN_ID" || true
+          git push origin HEAD:limitroad-france-rebuild-20260902 || true
