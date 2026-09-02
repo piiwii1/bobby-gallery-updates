@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python -m pip install --disable-pip-version-check osmium==4.3.1
-      - run: curl -fL --retry 4 --retry-delay 5 'https://download.geofabrik.de/europe/france/alsace-260820.osm.pbf' -o alsace.osm.pbf
+      - run: curl -fL --retry 4 --retry-delay 5 'https://download.geofabrik.de/europe/france/alsace-latest.osm.pbf' -o alsace.osm.pbf
       - name: Count service subtypes
         run: |
           python - <<'PY'
@@ -34,6 +34,6 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: LimitRoad-France-service-analysis
+          name: LimitRoad-France-service-analysis-current
           path: service-analysis.json
           retention-days: 7
