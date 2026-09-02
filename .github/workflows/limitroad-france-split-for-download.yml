@@ -1,0 +1,39 @@
+name: LimitRoad France Split For Download
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-france-split-for-download.yml' ]
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: LimitRoad-Map-France-02.09.2026-unsigned
+          path: input
+          repository: piiwii1/bobby-gallery-updates
+          run-id: 33674328719
+          github-token: ${{ github.token }}
+      - name: Split APK
+        run: |
+          set -euxo pipefail
+          APK=$(find input -type f -name '*.apk' | head -1)
+          test -n "$APK"
+          sha256sum "$APK" | tee unsigned.sha256
+          split -b 180000000 -d -a 3 "$APK" France.part
+          ls -lh France.part*
+          test "$(ls France.part* | wc -l)" -eq 4
+      - uses: actions/upload-artifact@v4
+        with: { name: France-part000, path: France.part000, retention-days: 7, compression-level: 0 }
+      - uses: actions/upload-artifact@v4
+        with: { name: France-part001, path: France.part001, retention-days: 7, compression-level: 0 }
+      - uses: actions/upload-artifact@v4
+        with: { name: France-part002, path: France.part002, retention-days: 7, compression-level: 0 }
+      - uses: actions/upload-artifact@v4
+        with: { name: France-part003, path: France.part003, retention-days: 7, compression-level: 0 }
+      - uses: actions/upload-artifact@v4
+        with: { name: France-unsigned-sha256, path: unsigned.sha256, retention-days: 7 }
