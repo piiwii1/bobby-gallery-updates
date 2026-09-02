@@ -1,0 +1,26 @@
+name: LimitRoad Android signing tools
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-signing-tools.yml' ]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Locate build tools
+        run: |
+          set -e
+          BT=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          echo "Using $BT"
+          mkdir -p out
+          cp "$BT/lib/apksigner.jar" out/apksigner.jar
+          cp "$BT/zipalign" out/zipalign
+          chmod +x out/zipalign
+          ls -lh out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-Android-signing-tools
+          path: out/
+          retention-days: 7
