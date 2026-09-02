@@ -1,0 +1,19 @@
+name: LimitRoad zipalign runtime 37
+on:
+  push:
+    branches: [ limitroad-france-rebuild-20260902 ]
+    paths: [ '.github/workflows/limitroad-zipalign-runtime37.yml' ]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir -p out
+          cp "$ANDROID_HOME/build-tools/37.0.0/lib64/libc++.so" out/libc++.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LimitRoad-zipalign-runtime37
+          path: out/libc++.so
+          retention-days: 7
