@@ -1,4 +1,4 @@
-name: Temporary GTI Speedometer 1.4.4 Build
+name: Temporary GTI Speedometer 1.4.5 Build
 
 on:
   push:
@@ -33,60 +33,81 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rebuild 1.4.3 source and patch to 1.4.4
+      - name: Rebuild 1.4.3 source and patch to 1.4.5
         run: |
           set -euo pipefail
-          rm -rf /tmp/gtispeed144
-          mkdir -p /tmp/gtispeed144
+          rm -rf /tmp/gtispeed145
+          mkdir -p /tmp/gtispeed145
           cat tmp-gti-speedometer-143/parts/part-*.b64 | base64 -d > /tmp/Compteur-GTI-1.4.3-SOURCE.zip
           echo '56abcd9258291b552f4b5e1fa464cfe43262e922ce15b08b82916f08f51cbb3c  /tmp/Compteur-GTI-1.4.3-SOURCE.zip' | sha256sum -c -
-          unzip -q /tmp/Compteur-GTI-1.4.3-SOURCE.zip -d /tmp/gtispeed144
+          unzip -q /tmp/Compteur-GTI-1.4.3-SOURCE.zip -d /tmp/gtispeed145
           python3 - <<'PY'
           from pathlib import Path
-          p=Path('/tmp/gtispeed144/app/src/main/java/ch/piiwii/gtispeed/MainActivity.java')
+          root=Path('/tmp/gtispeed145')
+
+          p=root/'app/src/main/java/ch/piiwii/gtispeed/MainActivity.java'
           s=p.read_text()
           s=s.replace('scaleSeek.setMax(26); // 80 % -> 106 %, pas de 1 %','scaleSeek.setMax(40); // 80 % -> 120 %, pas de 1 %')
-          s=s.replace('80 %  ←  plus petit        •        100 % = taille actuelle        •        106 % = maxi sans découpe','80 %  ←  plus petit        •        100 % = taille actuelle        •        106 % = plein cadre        •        120 % = très grand')
+          s=s.replace('80 %  ←  plus petit        •        100 % = taille actuelle        •        106 % = maxi sans découpe','80 %  ←  plus petit        •        100 % = taille actuelle        •        109 % = grand sans rognage dans le Launcher GTI        •        120 % = très grand')
           p.write_text(s)
-          p=Path('/tmp/gtispeed144/app/src/main/java/ch/piiwii/gtispeed/GtiPrefs.java')
+
+          p=root/'app/src/main/java/ch/piiwii/gtispeed/GtiPrefs.java'
           s=p.read_text().replace('Math.min(106,p(c).getInt("gauge_scale_percent",100))','Math.min(120,p(c).getInt("gauge_scale_percent",100))').replace('Math.min(106,v)','Math.min(120,v)')
           p.write_text(s)
-          p=Path('/tmp/gtispeed144/app/build.gradle')
-          s=p.read_text().replace('versionCode 8','versionCode 9').replace("versionName '1.4.3'","versionName '1.4.4'")
+
+          p=root/'app/build.gradle'
+          s=p.read_text().replace('versionCode 8','versionCode 10').replace("versionName '1.4.3'","versionName '1.4.5'")
+          p.write_text(s)
+
+          p=root/'app/src/main/java/ch/piiwii/gtispeed/GaugeRenderer.java'
+          s=p.read_text()
+          old='''  static Bitmap render(Context ctx,float speedKmh){\n    Bitmap b=Bitmap.createBitmap(REF_W,REF_H,Bitmap.Config.ARGB_8888);\n    Canvas c=new Canvas(b);\n    draw(ctx,c,Math.max(0f,Math.min(280f,speedKmh)));\n    return b;\n  }\n'''
+          new='''  static Bitmap render(Context ctx,float speedKmh){\n    return renderInto(ctx,speedKmh,REF_W,REF_H);\n  }\n\n  static Bitmap renderWidget(Context ctx,float speedKmh){\n    return renderInto(ctx,speedKmh,410,380);\n  }\n\n  private static Bitmap renderInto(Context ctx,float speedKmh,int w,int h){\n    Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);\n    Canvas c=new Canvas(b);\n    float dx=(w-REF_W)/2f,dy=(h-REF_H)/2f;\n    c.save();\n    c.translate(dx,dy);\n    draw(ctx,c,Math.max(0f,Math.min(280f,speedKmh)));\n    c.restore();\n    return b;\n  }\n'''
+          if old not in s: raise SystemExit('GaugeRenderer target not found')
+          p.write_text(s.replace(old,new))
+
+          p=root/'app/src/main/java/ch/piiwii/gtispeed/GtiWidgetUpdater.java'
+          s=p.read_text().replace('Bitmap b=GaugeRenderer.render(c,speedKmh);','Bitmap b=GaugeRenderer.renderWidget(c,speedKmh);')
+          p.write_text(s)
+
+          p=root/'app/src/main/res/layout/widget_speed.xml'
+          s=p.read_text().replace('android:layout_width="380dp" android:layout_height="350dp"','android:layout_width="match_parent" android:layout_height="match_parent"')
           p.write_text(s)
           PY
-          grep -q "versionName '1.4.4'" /tmp/gtispeed144/app/build.gradle
-          grep -q "versionCode 9" /tmp/gtispeed144/app/build.gradle
-          grep -q 'scaleSeek.setMax(40)' /tmp/gtispeed144/app/src/main/java/ch/piiwii/gtispeed/MainActivity.java
-          grep -q 'Math.min(120' /tmp/gtispeed144/app/src/main/java/ch/piiwii/gtispeed/GtiPrefs.java
+          grep -q "versionName '1.4.5'" /tmp/gtispeed145/app/build.gradle
+          grep -q "versionCode 10" /tmp/gtispeed145/app/build.gradle
+          grep -q 'scaleSeek.setMax(40)' /tmp/gtispeed145/app/src/main/java/ch/piiwii/gtispeed/MainActivity.java
+          grep -q 'renderInto(ctx,speedKmh,410,380)' /tmp/gtispeed145/app/src/main/java/ch/piiwii/gtispeed/GaugeRenderer.java
+          grep -q 'renderWidget(c,speedKmh)' /tmp/gtispeed145/app/src/main/java/ch/piiwii/gtispeed/GtiWidgetUpdater.java
+          grep -q 'layout_width="match_parent"' /tmp/gtispeed145/app/src/main/res/layout/widget_speed.xml
 
       - name: Build release APK
-        working-directory: /tmp/gtispeed144
+        working-directory: /tmp/gtispeed145
         run: gradle --no-daemon --stacktrace clean assembleRelease
 
       - name: Validate and prepare output
         run: |
           set -euo pipefail
-          APK=/tmp/gtispeed144/app/build/outputs/apk/release/app-release-unsigned.apk
+          APK=/tmp/gtispeed145/app/build/outputs/apk/release/app-release-unsigned.apk
           BT="$ANDROID_HOME/build-tools/35.0.0"
           test -s "$APK"
           rm -rf out
           mkdir -p out/apksigner-tool/lib
-          cp "$APK" out/Compteur-GTI-1.4.4-UNSIGNED.apk
-          "$BT/zipalign" -f -p 4 "$APK" out/Compteur-GTI-1.4.4-ALIGNED-UNSIGNED.apk
+          cp "$APK" out/Compteur-GTI-1.4.5-UNSIGNED.apk
+          "$BT/zipalign" -f -p 4 "$APK" out/Compteur-GTI-1.4.5-ALIGNED-UNSIGNED.apk
           "$BT/aapt" dump badging "$APK" | tee out/AAPT-BADGING.txt
-          grep -q "package: name='ch.piiwii.gtispeed' versionCode='9' versionName='1.4.4'" out/AAPT-BADGING.txt
+          grep -q "package: name='ch.piiwii.gtispeed' versionCode='10' versionName='1.4.5'" out/AAPT-BADGING.txt
           cp "$BT/apksigner" out/apksigner-tool/apksigner
           cp "$BT/lib/apksigner.jar" out/apksigner-tool/lib/apksigner.jar
           cp "$BT/zipalign" out/apksigner-tool/zipalign
           chmod +x out/apksigner-tool/apksigner out/apksigner-tool/zipalign
-          cd /tmp/gtispeed144 && zip -qr "$GITHUB_WORKSPACE/out/Compteur-GTI-1.4.4-SOURCE.zip" .
+          cd /tmp/gtispeed145 && zip -qr "$GITHUB_WORKSPACE/out/Compteur-GTI-1.4.5-SOURCE.zip" .
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/Compteur-GTI-1.4.4-UNSIGNED.apk out/Compteur-GTI-1.4.4-ALIGNED-UNSIGNED.apk out/Compteur-GTI-1.4.4-SOURCE.zip | tee out/SHA256-BUILD.txt
+          sha256sum out/Compteur-GTI-1.4.5-UNSIGNED.apk out/Compteur-GTI-1.4.5-ALIGNED-UNSIGNED.apk out/Compteur-GTI-1.4.5-SOURCE.zip | tee out/SHA256-BUILD.txt
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Compteur-GTI-1.4.4-unsigned-build
+          name: Compteur-GTI-1.4.5-unsigned-build
           path: out/
           retention-days: 1
