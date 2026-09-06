@@ -1,0 +1,66 @@
+name: Temporary GTI Speedometer 1.4.3 Build
+
+on:
+  push:
+    branches: [ tmp-gti-speedometer-1.4.3-build ]
+    paths:
+      - 'tmp-gti-speedometer-143/**'
+      - '.github/workflows/tmp-gti-speedometer-143.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Unpack project
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gtispeed143
+          mkdir -p /tmp/gtispeed143
+          unzip -q tmp-gti-speedometer-143/Compteur-GTI-1.4.3-SOURCE.zip -d /tmp/gtispeed143
+          test -f /tmp/gtispeed143/app/build.gradle
+          grep -q "versionName '1.4.3'" /tmp/gtispeed143/app/build.gradle
+          grep -q "versionCode 8" /tmp/gtispeed143/app/build.gradle
+
+      - name: Build release APK
+        working-directory: /tmp/gtispeed143
+        run: gradle --no-daemon --stacktrace clean assembleRelease
+
+      - name: Validate output
+        run: |
+          set -euo pipefail
+          APK=/tmp/gtispeed143/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          mkdir -p out
+          cp "$APK" out/Compteur-GTI-1.4.3-UNSIGNED.apk
+          sha256sum out/Compteur-GTI-1.4.3-UNSIGNED.apk | tee out/Compteur-GTI-1.4.3-UNSIGNED-SHA256.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee out/AAPT-BADGING.txt
+          grep -q "package: name='ch.piiwii.gtispeed' versionCode='8' versionName='1.4.3'" out/AAPT-BADGING.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Compteur-GTI-1.4.3-unsigned-build
+          path: out/
+          retention-days: 1
