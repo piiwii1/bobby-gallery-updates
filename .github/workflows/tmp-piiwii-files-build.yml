@@ -27,15 +27,7 @@ jobs:
           echo "2e9fb08936615f0bdee089f6d28699807e441ae6a4f4c01a1bc75c966d38fda7  /tmp/piiwii-files.zip" | sha256sum -c -
           mkdir -p /tmp/piiwii-files
           unzip -q /tmp/piiwii-files.zip -d /tmp/piiwii-files
-          cat >> /tmp/piiwii-files/app/build.gradle <<'EOF'
-
-android {
-    lint {
-        disable 'ExpiredTargetSdkVersion'
-        abortOnError true
-    }
-}
-EOF
+          printf '%s\n' '' 'android {' '    lint {' "        disable 'ExpiredTargetSdkVersion'" '        abortOnError true' '    }' '}' >> /tmp/piiwii-files/app/build.gradle
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
