@@ -1,0 +1,10 @@
+name: PiiWii Files Runner Test
+on:
+  push:
+    paths:
+      - '.github/workflows/piiwii-files-runner-test.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo runner-ok
