@@ -22,11 +22,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat tmp-piiwii-files/project.zip.b64.part* > /tmp/piiwii-files.zip.b64
-          base64 -d /tmp/piiwii-files.zip.b64 > /tmp/piiwii-files.zip
-          echo "2e9fb08936615f0bdee089f6d28699807e441ae6a4f4c01a1bc75c966d38fda7  /tmp/piiwii-files.zip" | sha256sum -c -
+          echo "8fe37121a5498ab43b688e447d3689f4e5dcf08e424b5b1dd41a2562e057169d  tmp-piiwii-files/project.zip" | sha256sum -c -
           mkdir -p /tmp/piiwii-files
-          unzip -q /tmp/piiwii-files.zip -d /tmp/piiwii-files
+          unzip -q tmp-piiwii-files/project.zip -d /tmp/piiwii-files
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
