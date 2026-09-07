@@ -1,0 +1,66 @@
+name: Temporary PiiWii Files 1.0.0 Build
+
+on:
+  push:
+    branches: [ tmp-piiwii-files-1.0.0-build ]
+    paths:
+      - 'tmp-piiwii-files/**'
+      - '.github/workflows/tmp-piiwii-files-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct project
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat tmp-piiwii-files/project.zip.b64.part* > /tmp/piiwii-files.zip.b64
+          base64 -d /tmp/piiwii-files.zip.b64 > /tmp/piiwii-files.zip
+          echo "2e9fb08936615f0bdee089f6d28699807e441ae6a4f4c01a1bc75c966d38fda7  /tmp/piiwii-files.zip" | sha256sum -c -
+          mkdir -p /tmp/piiwii-files
+          unzip -q /tmp/piiwii-files.zip -d /tmp/piiwii-files
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build unsigned release APK
+        working-directory: /tmp/piiwii-files
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Verify output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/piiwii-files/app/build/outputs/apk/release/app-release-unsigned.apk
+          cp /tmp/piiwii-files/app/build/outputs/apk/release/app-release-unsigned.apk "$GITHUB_WORKSPACE/PiiWii-Files-1.0.0-unsigned.apk"
+          sha256sum "$GITHUB_WORKSPACE/PiiWii-Files-1.0.0-unsigned.apk"
+
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Files-1.0.0-unsigned
+          path: PiiWii-Files-1.0.0-unsigned.apk
+          retention-days: 1
+          if-no-files-found: error
