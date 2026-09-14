@@ -37,7 +37,7 @@ jobs:
         run: |
           rm -rf piwii-reactions-build
           mkdir piwii-reactions-build
-          cat tmp-piiwii-reactions-120/source-part-* | base64 -d > /tmp/src.tgz
+          cat tmp-piiwii-reactions-120/exact-* | base64 -d > /tmp/src.tgz
           tar -xzf /tmp/src.tgz -C piwii-reactions-build
           grep -n "versionCode\|versionName" piwii-reactions-build/app/build.gradle
 
