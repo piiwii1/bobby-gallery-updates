@@ -1,0 +1,75 @@
+name: Temporary PiiWii Reactions 1.2.0 Build
+
+on:
+  push:
+    branches: [ tmp-piiwii-reactions-120-build ]
+    paths:
+      - 'tmp-piiwii-reactions-120/**'
+      - '.github/workflows/tmp-piiwii-reactions-120-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Restore source
+        run: |
+          rm -rf piwii-reactions-build
+          mkdir piwii-reactions-build
+          base64 -d tmp-piiwii-reactions-120/source.b64 > /tmp/src.tgz
+          tar -xzf /tmp/src.tgz -C piwii-reactions-build
+          grep -n "versionCode\|versionName" piwii-reactions-build/app/build.gradle
+
+      - name: Build APK
+        working-directory: piwii-reactions-build
+        run: gradle --no-daemon :app:assembleDebug --stacktrace
+
+      - name: Validate debug APK
+        working-directory: piwii-reactions-build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery120
+          cp app/build/outputs/apk/debug/app-debug.apk delivery120/PiiWii-Reactions-1.2.0-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/BADGING.txt
+          grep "package:" delivery120/BADGING.txt
+          grep -q "versionCode='3'" delivery120/BADGING.txt
+          grep -q "versionName='1.2.0'" delivery120/BADGING.txt
+          unzip -t delivery120/PiiWii-Reactions-1.2.0-debug.apk >/dev/null
+          sha256sum delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/DEBUG-SHA256.txt
+
+      - name: Build source pack
+        working-directory: piwii-reactions-build
+        run: |
+          zip -qr delivery120/PiiWii-Reactions-1.2.0-SOURCES.zip . -x 'app/build/*' '.gradle/*' 'delivery120/*'
+          cp CHANGELOG.md delivery120/CHANGELOG-1.2.0.md
+          cp VALIDATION.md delivery120/VALIDATION-DRAFT.md
+
+      - name: Upload delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Reactions-1.2.0-Build
+          path: piwii-reactions-build/delivery120/*
+          retention-days: 7
+          if-no-files-found: error
