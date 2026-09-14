@@ -37,9 +37,16 @@ jobs:
         run: |
           rm -rf piwii-reactions-build
           mkdir piwii-reactions-build
-          base64 -d tmp-piiwii-reactions-120/source.b64 > /tmp/src.tgz
+          cat tmp-piiwii-reactions-120/source-part-* | base64 -d > /tmp/src.tgz
           tar -xzf /tmp/src.tgz -C piwii-reactions-build
           grep -n "versionCode\|versionName" piwii-reactions-build/app/build.gradle
+
+      - name: Generate mascot assets
+        working-directory: piwii-reactions-build
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 tools/generate_mascots.py
+          test $(find app/src/main/assets/default_pack -name '*.png' | wc -l) -eq 18
 
       - name: Build APK
         working-directory: piwii-reactions-build
@@ -53,6 +60,7 @@ jobs:
           mkdir -p delivery120
           cp app/build/outputs/apk/debug/app-debug.apk delivery120/PiiWii-Reactions-1.2.0-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/BADGING.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/DEBUG-APKSIGNER.txt
           grep "package:" delivery120/BADGING.txt
           grep -q "versionCode='3'" delivery120/BADGING.txt
           grep -q "versionName='1.2.0'" delivery120/BADGING.txt
