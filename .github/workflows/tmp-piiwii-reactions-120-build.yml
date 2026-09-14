@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           mkdir -p delivery120
           cp app/build/outputs/apk/debug/app-debug.apk delivery120/PiiWii-Reactions-1.2.0-debug.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" delivery120/apksigner.jar
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/BADGING.txt
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs delivery120/PiiWii-Reactions-1.2.0-debug.apk > delivery120/DEBUG-APKSIGNER.txt
           grep "package:" delivery120/BADGING.txt
