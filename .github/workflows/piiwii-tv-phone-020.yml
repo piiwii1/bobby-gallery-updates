@@ -12,21 +12,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Android 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Android 35 from preinstalled SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
 
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -41,7 +51,10 @@ jobs:
           test -f piiwii-tv-phone-0.2.0/app/build.gradle
           grep -q "versionName '0.2.0'" piiwii-tv-phone-0.2.0/app/build.gradle
           grep -q 'androidx.media3:media3-exoplayer-hls:1.7.1' piiwii-tv-phone-0.2.0/app/build.gradle
-          ! grep -R -n 'WebView' piiwii-tv-phone-0.2.0/app/src/main
+          if grep -R -n 'android.webkit.WebView\|<WebView' piiwii-tv-phone-0.2.0/app/src/main; then
+            echo 'WebView detected: refusing native build'
+            exit 1
+          fi
 
       - name: Build native Media3 APK
         working-directory: piiwii-tv-phone-0.2.0
@@ -75,6 +88,8 @@ jobs:
             cat apksigner.txt
             echo
             cat zipalign.txt
+            echo
+            cat unzip.txt
           } > out/PiiWii-TV-Phone-0.2.0-AUDIT.txt
 
       - name: Upload verified APK
