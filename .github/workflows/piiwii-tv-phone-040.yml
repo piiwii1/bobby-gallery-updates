@@ -46,7 +46,8 @@ jobs:
       - name: Restore 0.4.0 source
         run: |
           set -euo pipefail
-          cat piiwii-tv-phone-040-ci/src.part* | base64 -d > /tmp/piiwii-tv-phone-0.4.0.zip
+          cat piiwii-tv-phone-040-ci/src.part* | tr -d '\r\n\t ' | base64 --decode --ignore-garbage > /tmp/piiwii-tv-phone-0.4.0.zip
+          unzip -t /tmp/piiwii-tv-phone-0.4.0.zip
           unzip -q /tmp/piiwii-tv-phone-0.4.0.zip
           test -f piiwii-tv-phone-0.4.0/app/build.gradle
           test -f piiwii-tv-phone-0.4.0/app/src/main/java/ch/piiwii/tvphone/EpgRepository.java
