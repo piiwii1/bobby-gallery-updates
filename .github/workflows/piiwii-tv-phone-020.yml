@@ -51,6 +51,7 @@ jobs:
           test -f piiwii-tv-phone-0.2.0/app/build.gradle
           grep -q "versionName '0.2.0'" piiwii-tv-phone-0.2.0/app/build.gradle
           grep -q 'androidx.media3:media3-exoplayer-hls:1.7.1' piiwii-tv-phone-0.2.0/app/build.gradle
+          printf '%s\n' 'android.useAndroidX=true' 'android.enableJetifier=false' > piiwii-tv-phone-0.2.0/gradle.properties
           if grep -R -n 'android.webkit.WebView\|<WebView' piiwii-tv-phone-0.2.0/app/src/main; then
             echo 'WebView detected: refusing native build'
             exit 1
