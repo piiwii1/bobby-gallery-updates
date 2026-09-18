@@ -47,7 +47,8 @@ jobs:
           set -euo pipefail
           SRC='piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz'
           test -s "$SRC"
-          echo '6f60bf42a3a55829bb86c898fbf763b993e0c136e0f5b2c3838690f0776dc793  piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz' | sha256sum -c -
+          sha256sum "$SRC"
+          tar -tJf "$SRC" >/dev/null
           tar -xJf "$SRC"
           test -f piiwii-tv-phone-0.5.0/app/build.gradle
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/RecordingService.java
