@@ -1,0 +1,38 @@
+name: Inspect PiiWii TV DVR functions
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/inspect-piiwii-tv-dvr-functions.yml' ]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract exact DVR functions
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 'https://piiwii.ch/wp-content/plugins/geek-tv/assets/piiwii-tv.js?ver=0.6.104' -o /tmp/tv.js
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('/tmp/tv.js').read_text(errors='ignore').splitlines()
+          needles=[
+            'function apiFetch',
+            'function startMediaRecording',
+            "recording-session/start",
+            'function setScheduleRecordingState',
+            'pair/exchange',
+            'device/status',
+            'pairing-code',
+            'function loadDevices',
+          ]
+          seen=[]
+          for n in needles:
+            hits=[i for i,l in enumerate(lines) if n in l]
+            for i in hits:
+              a=max(0,i-18); b=min(len(lines),i+95)
+              key=(a,b)
+              if key in seen: continue
+              seen.append(key)
+              print(f'\n===== {n} @ line {i+1} =====')
+              for j in range(a,b): print(f'{j+1}: {lines[j]}')
+          PY
