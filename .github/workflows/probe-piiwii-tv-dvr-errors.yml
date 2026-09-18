@@ -1,0 +1,21 @@
+name: Probe PiiWii TV DVR validation
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/probe-piiwii-tv-dvr-errors.yml' ]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe harmless validation errors
+        run: |
+          set -u
+          base='https://piiwii.ch/wp-json/geektv/v1'
+          probe(){ echo; echo "=== $1 ==="; shift; curl -sS -i --max-time 20 "$@" | head -c 12000; echo; }
+          probe pair-empty -X POST -H 'Content-Type: application/json' -d '{}' "$base/pair/exchange"
+          probe pair-fake -X POST -H 'Content-Type: application/json' -d '{"code":"000000","name":"PiiWii TV Phone test","type":"phone"}' "$base/pair/exchange"
+          probe rec-empty -X POST -H 'Content-Type: application/json' -d '{}' "$base/recording-session/start"
+          probe schedules-empty -X POST -H 'Content-Type: application/json' -d '{}' "$base/schedules"
+          probe recordings-get "$base/recordings"
+          probe schedules-get "$base/schedules"
