@@ -1,0 +1,108 @@
+name: PiiWii TV Phone 0.5.0
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths:
+      - 'piiwii-tv-phone-050-ci/**'
+      - '.github/workflows/piiwii-tv-phone-050.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android 35 from preinstalled SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Restore 0.5.0 source
+        run: |
+          set -euo pipefail
+          cat piiwii-tv-phone-050-ci/src.part* | base64 --decode > /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          echo '631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07  /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip' | sha256sum -c -
+          unzip -t /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          test -f piiwii-tv-phone-0.5.0/app/build.gradle
+          test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/RecordingService.java
+          test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/ScheduleSyncJobService.java
+          grep -q "versionName '0.5.0'" piiwii-tv-phone-0.5.0/app/build.gradle
+          grep -q 'versionCode 5' piiwii-tv-phone-0.5.0/app/build.gradle
+          grep -q 'Dans le cloud PiiWii TV' piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/MainActivity.java
+          grep -q 'Sur ce téléphone' piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/MainActivity.java
+          grep -q 'Enregistrements' piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/MainActivity.java
+          grep -q 'pair/exchange' piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/DeviceApi.java
+          grep -q 'recording-session/start' piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/DeviceApi.java
+          if grep -R -n 'android.webkit.WebView\|<WebView' piiwii-tv-phone-0.5.0/app/src/main; then
+            echo 'WebView detected: refusing native build'
+            exit 1
+          fi
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > piiwii-tv-phone-0.5.0/gradle.properties
+
+      - name: Build native DVR APK
+        working-directory: piiwii-tv-phone-0.5.0
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Validate debug build
+        run: |
+          set -euo pipefail
+          APK='piiwii-tv-phone-0.5.0/app/build/outputs/apk/debug/app-debug.apk'
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$APK"
+          "$BT/zipalign" -c -v 4 "$APK" > zipalign.txt
+          "$BT/aapt" dump badging "$APK" | tee badging.txt
+          grep -F "package: name='ch.piiwii.tvphone'" badging.txt
+          grep -F "versionCode='5'" badging.txt
+          grep -F "versionName='0.5.0'" badging.txt
+          unzip -t "$APK" > unzip.txt
+          mkdir -p out
+          cp "$APK" out/PiiWii-TV-Phone-0.5.0-debug.apk
+          sha256sum out/PiiWii-TV-Phone-0.5.0-debug.apk > out/debug.sha256
+          {
+            echo 'PiiWii TV Phone 0.5.0 debug build validation'
+            echo 'Native Android; no WebView.'
+            echo 'DVR: local + cloud, manual + scheduled.'
+            echo 'Pairing: /pair/exchange.'
+            echo 'Cloud engine: existing PiiWii TV recording-session REST.'
+            echo 'Remote schedule polling: JobScheduler.'
+            echo
+            cat badging.txt
+            echo
+            cat zipalign.txt
+            echo
+            cat unzip.txt
+          } > out/PiiWii-TV-Phone-0.5.0-BUILD.txt
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-TV-Phone-0.5.0-debug
+          path: out/*
+          retention-days: 14
+          if-no-files-found: error
