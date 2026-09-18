@@ -1,0 +1,64 @@
+name: Diagnose PiiWii 0.5.0 after exact first repair
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: ['.github/workflows/diagnose-piiwii-050-after-first-exact.yml']
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,struct,zlib,binascii
+          D=Path('piiwii-tv-phone-050-ci')
+          def u(p): return ''.join(re.findall(r'[A-Za-z0-9+/=]',Path(p).read_text(errors='ignore')))
+          a=[u(D/f'src.part{i:02d}') for i in range(9)]
+          a[4]=u(D/'fix04a')+u(D/'fix04b')
+          a[6]=u(D/'fix06a')+u(D/'fix06b')
+          s=''.join(a)
+          needle='lIensanV4'
+          print('needle count',s.count(needle))
+          p=s.find(needle)
+          print('needle position',p,'context',s[p-30:p+40])
+          if p<0: raise SystemExit('needle missing')
+          # exact clean text from the original verified ZIP: lIesanV4
+          s=s[:p]+s[p:].replace(needle,'lIesanV4',1)
+          print('after first exact length',len(s))
+          # two extras still remain; remove 2 chars just before == only for prefix diagnosis
+          t=s[:-4]+s[-2:]
+          print('temporary decode len b64',len(t),len(t)%4)
+          raw=base64.b64decode(t,validate=True)
+          off=0; good=0
+          while off+4<=len(raw):
+              sig=raw[off:off+4]
+              if sig in (b'PK\x01\x02',b'PK\x05\x06'):
+                  print('CENTRAL',off,'good',good); break
+              if sig!=b'PK\x03\x04': print('BADSIG',off,sig.hex(),'good',good,'b64~',off*4//3); break
+              _,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<IHHHHHIIIHH',raw,off)
+              ns=off+30; ds=ns+nl+xl; de=ds+cs; name=raw[ns:ns+nl].decode(errors='replace')
+              extra=raw[ns+nl:ds]
+              ex=[]; eo=0; exok=True
+              while eo<len(extra):
+                  if eo+4>len(extra): exok=False; break
+                  eid,el=struct.unpack_from('<HH',extra,eo); eo+=4
+                  if eo+el>len(extra): exok=False; break
+                  ex.append((hex(eid),el)); eo+=el
+              if eo!=len(extra): exok=False
+              try:
+                  data=raw[ds:de]
+                  dec=data if method==0 else zlib.decompress(data,-15)
+                  ok=(len(dec)==us and (binascii.crc32(dec)&0xffffffff)==crc)
+              except Exception: ok=False
+              print(good+1,'off',off,'end',de,'crc',ok,'extra',exok,ex,'name',name)
+              if not ok or not exok:
+                  print('FAIL b64 range',max(0,off*4//3-120),min(len(s),de*4//3+120))
+                  print('CONTEXT',s[max(0,off*4//3-160):min(len(s),de*4//3+160)])
+                  break
+              good+=1; off=de
+          PY
