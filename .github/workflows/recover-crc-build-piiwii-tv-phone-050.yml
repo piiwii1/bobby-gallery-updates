@@ -1,0 +1,195 @@
+name: Recover CRC and build PiiWii TV Phone 0.5.0
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: ['.github/workflows/recover-crc-build-piiwii-tv-phone-050.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recover exact source from ZIP CRC and SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,struct,zlib,binascii,hashlib,zipfile,io
+          D=Path('piiwii-tv-phone-050-ci')
+          TARGET='631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07'
+          ALPH='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          def u(p): return ''.join(re.findall(r'[A-Za-z0-9+/=]',Path(p).read_text(errors='ignore')))
+          a=[u(D/f'src.part{i:02d}') for i in range(9)]
+          a[4]=u(D/'fix04a')+u(D/'fix04b')
+          a[6]=u(D/'fix06a')+u(D/'fix06b')
+          s=''.join(a)
+          assert len(s)==66895
+
+          # Proven first insertion: extra n in DeviceApi ux extra field.
+          p1=s.find('lIensanV4')
+          assert p1>=0
+          s=s[:p1]+s[p1:].replace('lIensanV4','lIesanV4',1)
+          assert len(s)==66894
+
+          # Decode prefix faithfully; delete 2 chars only from final payload as placeholders.
+          tmp=s[:-4]+s[-2:]
+          assert len(tmp)==66892
+          raw=bytearray(base64.b64decode(tmp,validate=True))
+
+          # Parse local entries until RecordingPlayerActivity (#27), without requiring its CRC.
+          off=0; target=None
+          for idx in range(1,28):
+              assert raw[off:off+4]==b'PK\x03\x04', (idx,off,raw[off:off+4])
+              _,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<IHHHHHIIIHH',raw,off)
+              ns=off+30; ds=ns+nl+xl; de=ds+cs
+              name=raw[ns:ns+nl].decode(errors='replace')
+              if idx<27:
+                  data=bytes(raw[ds:de]); dec=data if method==0 else zlib.decompress(data,-15)
+                  assert len(dec)==us and (binascii.crc32(dec)&0xffffffff)==crc, (idx,name)
+              else:
+                  target=(off,ds,de,name,method,crc,us)
+              off=de
+          off27,ds,de,name,method,want_crc,want_us=target
+          print('Target',name,'raw data',ds,de,'method',method,'crc',hex(want_crc),'usize',want_us)
+          assert name.endswith('/RecordingPlayerActivity.java')
+          assert method==8
+
+          # Base64 chars that can affect compressed data [ds,de).
+          qlo=max(0,(ds//3)*4-8); qhi=min(len(tmp)-2,((de+2)//3)*4+8)
+          print('Substitution search Base64',qlo,qhi,'chars',qhi-qlo)
+          winners=[]
+          base_raw=bytes(raw)
+          for p in range(qlo,qhi):
+              if tmp[p]=='=': continue
+              q=(p//4)*4
+              quartet=tmp[q:q+4]
+              if len(quartet)<4 or '=' in quartet: continue
+              rawpos=(q//4)*3
+              old3=base64.b64decode(quartet)
+              for ch in ALPH:
+                  if ch==tmp[p]: continue
+                  rel=p-q
+                  nq=quartet[:rel]+ch+quartet[rel+1:]
+                  try: new3=base64.b64decode(nq,validate=True)
+                  except Exception: continue
+                  if new3==old3: continue
+                  patched=bytearray(base_raw)
+                  patched[rawpos:rawpos+3]=new3
+                  try:
+                      dec=zlib.decompress(bytes(patched[ds:de]),-15)
+                  except Exception:
+                      continue
+                  if len(dec)==want_us and (binascii.crc32(dec)&0xffffffff)==want_crc:
+                      winners.append((p,tmp[p],ch,q,rawpos))
+          print('CRC WINNERS',len(winners),winners[:50])
+          assert winners, 'No CRC substitution winner'
+
+          # After the first proven deletion, exactly two malformed ux markers remain.
+          # For every CRC-valid substitution, delete those two known extra n chars and require global original SHA.
+          exact=None
+          for p,old,new,q,rawpos in winners:
+              cand=s[:p]+new+s[p+1:]
+              count=cand.count('lIensanV4')
+              print('candidate substitution',p,old,'->',new,'remaining malformed markers',count)
+              if count!=2: continue
+              cand=cand.replace('lIensanV4','lIesanV4')
+              if len(cand)!=66892: continue
+              try: zraw=base64.b64decode(cand,validate=True)
+              except Exception: continue
+              sha=hashlib.sha256(zraw).hexdigest()
+              print('candidate SHA',sha)
+              if sha==TARGET:
+                  z=zipfile.ZipFile(io.BytesIO(zraw)); bad=z.testzip()
+                  print('EXACT candidate bad=',bad,'entries=',len(z.infolist()))
+                  if bad is None: exact=zraw; break
+          assert exact is not None, 'No candidate matches exact source SHA'
+          assert len(exact)==50167
+          Path('/tmp/PiiWii-TV-Phone-0.5.0-Sources.zip').write_bytes(exact)
+          print('EXACT_SOURCE_RECOVERED',hashlib.sha256(exact).hexdigest())
+          PY
+
+          rm -rf /tmp/src050 && mkdir -p /tmp/src050
+          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip -d /tmp/src050
+          PROJECT=$(find /tmp/src050 -type f -path '*/app/build.gradle' -printf '%h\n' | sed 's#/app$##' | head -n1)
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          grep -q "applicationId 'ch.piiwii.tvphone'" "$PROJECT/app/build.gradle"
+          grep -q 'versionCode 5' "$PROJECT/app/build.gradle"
+          grep -q "versionName '0.5.0'" "$PROJECT/app/build.gradle"
+          if grep -R -n 'android.webkit.WebView\|<WebView' "$PROJECT/app/src/main"; then
+            echo 'WebView detected; refusing build'
+            exit 1
+          fi
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build native APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT"
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > gradle.properties
+          gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Validate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$APK"
+          mkdir -p out
+          cp "$APK" out/PiiWii-TV-Phone-0.5.0.apk
+          cp /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip out/PiiWii-TV-Phone-0.5.0-Sources.zip
+          unzip -t out/PiiWii-TV-Phone-0.5.0.apk | tee out/unzip.txt
+          "$BT/zipalign" -c -v 4 out/PiiWii-TV-Phone-0.5.0.apk | tee out/zipalign.txt
+          "$BT/apksigner" verify --verbose --print-certs out/PiiWii-TV-Phone-0.5.0.apk | tee out/apksigner.txt
+          "$BT/aapt" dump badging out/PiiWii-TV-Phone-0.5.0.apk | tee out/badging.txt
+          grep -F "package: name='ch.piiwii.tvphone'" out/badging.txt
+          grep -F "versionCode='5'" out/badging.txt
+          grep -F "versionName='0.5.0'" out/badging.txt
+          grep -F 'Verified using v2 scheme (APK Signature Scheme v2): true' out/apksigner.txt
+          sha256sum out/PiiWii-TV-Phone-0.5.0.apk | tee out/PiiWii-TV-Phone-0.5.0.sha256
+          sha256sum out/PiiWii-TV-Phone-0.5.0-Sources.zip | tee out/PiiWii-TV-Phone-0.5.0-Sources.sha256
+          {
+            echo 'PiiWii TV Phone 0.5.0 - AUDIT'
+            echo 'Source exact SHA-256 attendu: 631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07'
+            cat out/PiiWii-TV-Phone-0.5.0-Sources.sha256
+            cat out/PiiWii-TV-Phone-0.5.0.sha256
+            echo; cat out/badging.txt
+            echo; cat out/apksigner.txt
+            echo; cat out/zipalign.txt
+          } > out/PiiWii-TV-Phone-0.5.0-AUDIT.txt
+
+      - name: Upload delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-TV-Phone-0.5.0-DELIVERY
+          path: out/*
+          retention-days: 14
+          if-no-files-found: error
