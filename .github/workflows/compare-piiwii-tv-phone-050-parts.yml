@@ -1,0 +1,23 @@
+name: Compare PiiWii TV Phone 0.5.0 chunks
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/compare-piiwii-tv-phone-050-parts.yml' ]
+  workflow_dispatch:
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import pathlib,difflib
+          d=pathlib.Path('piiwii-tv-phone-050-ci')
+          def r(n): return ''.join(c for c in (d/n).read_text() if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+          pairs=[('00',r('src.part00'),r('fix00a')+r('fix00b')),('04',r('src.part04'),r('fix04a')+r('fix04b')),('06',r('src.part06'),r('fix06a')+r('fix06b'))]
+          for k,a,b in pairs:
+              print('===',k,'===',len(a),len(b))
+              for tag,i1,i2,j1,j2 in difflib.SequenceMatcher(None,a,b,autojunk=False).get_opcodes():
+                  if tag!='equal':
+                      print(tag,i1,i2,j1,j2,'ORIG=',repr(a[i1:i2]),'FIX=',repr(b[j1:j2]))
+          PY
