@@ -1,0 +1,26 @@
+name: Inspect PiiWii TV DVR REST
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/inspect-piiwii-tv-rest.yml' ]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch REST index and print DVR routes
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 'https://piiwii.ch/wp-json/' -o /tmp/wp.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/wp.json'))
+          routes=j.get('routes',{})
+          keys=('pair','device','schedule','record','recording')
+          for path in sorted(routes):
+              if '/geektv/v1/' not in path: continue
+              if not any(k in path.lower() for k in keys): continue
+              r=routes[path]
+              print('\nROUTE',path)
+              print(json.dumps(r,ensure_ascii=False,indent=2)[:30000])
+          PY
