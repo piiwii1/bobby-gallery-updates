@@ -1,0 +1,185 @@
+name: Repair and build PiiWii TV Phone 0.5.0
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: ['.github/workflows/repair-and-build-piiwii-tv-phone-050.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Repair exact source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,struct,zlib,binascii,hashlib,zipfile,io
+          D=Path('piiwii-tv-phone-050-ci')
+          TARGET='631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07'
+          def u(p): return ''.join(re.findall(r'[A-Za-z0-9+/=]',Path(p).read_text(errors='ignore')))
+          parts=[u(D/f'src.part{i:02d}') for i in range(9)]
+          parts[4]=u(D/'fix04a')+u(D/'fix04b')
+          parts[6]=u(D/'fix06a')+u(D/'fix06b')
+          cur=''.join(parts)
+          assert len(cur)==66895, len(cur)
+          assert cur.endswith('==')
+
+          def decode_with_placeholders(s, remaining):
+              # Remove remaining unknown extras at the far end only to make length decodable.
+              if remaining:
+                  core=s[:-2]
+                  t=core[:-remaining]+'=='
+              else: t=s
+              return base64.b64decode(t,validate=True)
+
+          def parse(raw):
+              off=0; good=0; last_end=0; fail=('end',0,0,'')
+              while off+4<=len(raw):
+                  sig=raw[off:off+4]
+                  if sig in (b'PK\x01\x02',b'PK\x05\x06'):
+                      return good, ('central',off,off,'')
+                  if sig!=b'PK\x03\x04':
+                      return good, ('badsig',off,off,'')
+                  if off+30>len(raw): return good,('shortheader',off,off,'')
+                  _,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<IHHHHHIIIHH',raw,off)
+                  ns=off+30; ds=ns+nl+xl; de=ds+cs
+                  name=raw[ns:ns+nl].decode(errors='replace')
+                  if de>len(raw): return good,('shortdata',off,de,name)
+                  data=raw[ds:de]
+                  try:
+                      if method==0: dec=data
+                      elif method==8: dec=zlib.decompress(data,-15)
+                      else: return good,('method',off,de,name)
+                      ok=(len(dec)==us and (binascii.crc32(dec)&0xffffffff)==crc)
+                  except Exception: ok=False
+                  if not ok: return good,('badcrc',off,de,name)
+                  good+=1; last_end=de; off=de
+              return good,('end',off,off,'')
+
+          removed=[]
+          for stage in range(3):
+              remaining=2-stage
+              raw=decode_with_placeholders(cur,remaining+1)  # before this stage, total unknown deletions left = remaining+1
+              good,fail=parse(raw)
+              kind,boff,bend,name=fail
+              print(f'STAGE {stage+1} before: good={good} fail={kind} bytes={boff}:{bend} name={name}')
+              if kind=='badcrc':
+                  lo=max(0,boff*4//3-120); hi=min(len(cur)-3,bend*4//3+120)
+              else:
+                  lo=max(0,boff*4//3-300); hi=min(len(cur)-3,boff*4//3+600)
+              if stage==0:
+                  lo=max(lo,1450); hi=min(hi,5450)
+              print('search b64',lo,hi,'width',hi-lo)
+              best=None; ties=[]
+              for p in range(lo,hi):
+                  if p>=len(cur)-2: continue
+                  cand=cur[:p]+cur[p+1:]
+                  try: rr=decode_with_placeholders(cand,remaining)
+                  except Exception: continue
+                  score,ff=parse(rr)
+                  # Prefer most valid sequential local entries; then furthest failure byte.
+                  metric=(score,ff[1])
+                  if best is None or metric>best[0]:
+                      best=(metric,p,cur[p],ff); ties=[best]
+                  elif metric==best[0]: ties.append((metric,p,cur[p],ff))
+              if best is None: raise SystemExit('no candidate')
+              print('BEST',best,'ties',len(ties),'sample',ties[:12])
+              # if multiple equivalent, defer exact choice by carrying first unless final SHA search can resolve.
+              p=best[1]
+              removed.append((p,cur[p]))
+              cur=cur[:p]+cur[p+1:]
+              print('removed',removed,'newlen',len(cur))
+
+          print('final length',len(cur))
+          raw=base64.b64decode(cur,validate=True)
+          sha=hashlib.sha256(raw).hexdigest()
+          print('FINAL size',len(raw),'sha',sha)
+          z=zipfile.ZipFile(io.BytesIO(raw)); bad=z.testzip(); print('entries',len(z.infolist()),'testzip',bad)
+          if sha!=TARGET or len(raw)!=50167 or bad is not None:
+              raise SystemExit('GREEDY_REPAIR_NOT_EXACT')
+          Path('/tmp/PiiWii-TV-Phone-0.5.0-Sources.zip').write_bytes(raw)
+          print('EXACT_SOURCE_RECOVERED')
+          PY
+          mkdir -p /tmp/src050
+          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip -d /tmp/src050
+          PROJECT=$(find /tmp/src050 -type f -path '*/app/build.gradle' -printf '%h\n' | sed 's#/app$##' | head -n1)
+          test -n "$PROJECT"
+          echo "PROJECT=$PROJECT" >> "$GITHUB_ENV"
+          grep -q "versionName '0.5.0'" "$PROJECT/app/build.gradle"
+          grep -q 'versionCode 5' "$PROJECT/app/build.gradle"
+          grep -q "applicationId 'ch.piiwii.tvphone'" "$PROJECT/app/build.gradle"
+          if grep -R -n 'android.webkit.WebView\|<WebView' "$PROJECT/app/src/main"; then exit 1; fi
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build native APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT"
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > gradle.properties
+          gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Validate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$PROJECT/app/build/outputs/apk/debug/app-debug.apk"
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          mkdir -p out
+          cp "$APK" out/PiiWii-TV-Phone-0.5.0.apk
+          unzip -t out/PiiWii-TV-Phone-0.5.0.apk | tee out/unzip.txt
+          "$BT/zipalign" -c -v 4 out/PiiWii-TV-Phone-0.5.0.apk | tee out/zipalign.txt
+          "$BT/apksigner" verify --verbose --print-certs out/PiiWii-TV-Phone-0.5.0.apk | tee out/apksigner.txt
+          "$BT/aapt" dump badging out/PiiWii-TV-Phone-0.5.0.apk | tee out/badging.txt
+          grep -F "package: name='ch.piiwii.tvphone'" out/badging.txt
+          grep -F "versionCode='5'" out/badging.txt
+          grep -F "versionName='0.5.0'" out/badging.txt
+          grep -F 'Verified using v2 scheme (APK Signature Scheme v2): true' out/apksigner.txt
+          sha256sum out/PiiWii-TV-Phone-0.5.0.apk | tee out/PiiWii-TV-Phone-0.5.0.sha256
+          cp /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip out/
+          {
+            echo 'PiiWii TV Phone 0.5.0 validation'
+            echo 'Source SHA-256: 631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07'
+            cat out/PiiWii-TV-Phone-0.5.0.sha256
+            echo; cat out/badging.txt
+            echo; cat out/apksigner.txt
+            echo; cat out/zipalign.txt
+          } > out/PiiWii-TV-Phone-0.5.0-AUDIT.txt
+
+      - name: Upload delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-TV-Phone-0.5.0-DELIVERY
+          path: out/*
+          retention-days: 14
+          if-no-files-found: error
