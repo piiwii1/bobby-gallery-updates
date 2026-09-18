@@ -42,13 +42,13 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Restore 0.5.0 source
+      - name: Restore exact 0.5.0 source
         run: |
           set -euo pipefail
-          cat piiwii-tv-phone-050-ci/src.part* | base64 --decode > /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
-          echo '631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07  /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip' | sha256sum -c -
-          unzip -t /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
-          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          SRC='piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz'
+          test -s "$SRC"
+          echo '6f60bf42a3a55829bb86c898fbf763b993e0c136e0f5b2c3838690f0776dc793  piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz' | sha256sum -c -
+          tar -xJf "$SRC"
           test -f piiwii-tv-phone-0.5.0/app/build.gradle
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/RecordingService.java
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/ScheduleSyncJobService.java
