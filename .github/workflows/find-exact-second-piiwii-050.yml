@@ -1,0 +1,69 @@
+name: Find exact second PiiWii 0.5.0 corruption
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: ['.github/workflows/find-exact-second-piiwii-050.yml']
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,struct,zlib,binascii,hashlib
+          D=Path('piiwii-tv-phone-050-ci')
+          def u(p): return ''.join(re.findall(r'[A-Za-z0-9+/=]',Path(p).read_text(errors='ignore')))
+          a=[u(D/f'src.part{i:02d}') for i in range(9)]
+          a[4]=u(D/'fix04a')+u(D/'fix04b')
+          a[6]=u(D/'fix06a')+u(D/'fix06b')
+          s=''.join(a)
+          # First corruption is proven from the clean source prefix.
+          first=s.find('lIensanV4')
+          assert first>=0
+          s=s[:first]+s[first:].replace('lIensanV4','lIesanV4',1)
+          assert len(s)==66894
+
+          def parse_until(raw, want_index=27):
+              off=0; rows=[]
+              while off+4<=len(raw) and len(rows)<want_index:
+                  if raw[off:off+4]!=b'PK\x03\x04': return rows,('badsig',off,'')
+                  _,ver,flag,method,tm,dt,crc,cs,us,nl,xl=struct.unpack_from('<IHHHHHIIIHH',raw,off)
+                  ns=off+30; ds=ns+nl+xl; de=ds+cs
+                  if de>len(raw): return rows,('short',off,'')
+                  name=raw[ns:ns+nl].decode(errors='replace')
+                  try:
+                      data=raw[ds:de]
+                      dec=data if method==0 else zlib.decompress(data,-15)
+                      ok=len(dec)==us and (binascii.crc32(dec)&0xffffffff)==crc
+                  except Exception: ok=False
+                  rows.append((off,de,name,ok))
+                  if not ok: return rows,('crc',off,name)
+                  off=de
+              return rows,('ok',off,rows[-1][2] if rows else '')
+
+          # Candidate second corruption must be in RecordingPlayerActivity encoded region.
+          lo,hi=51300,53050
+          winners=[]
+          for p in range(lo,hi):
+              if p>=len(s)-2: continue
+              cand=s[:p]+s[p+1:]
+              # One unknown extra remains. Drop the last data char only as a decoding placeholder.
+              tmp=cand[:-3]+cand[-2:]
+              if len(tmp)%4: continue
+              try: raw=base64.b64decode(tmp,validate=True)
+              except Exception: continue
+              rows,fail=parse_until(raw,27)
+              if len(rows)>=27 and all(r[3] for r in rows[:27]):
+                  winners.append((p,s[p],rows[26][0],rows[26][1],rows[26][2]))
+          print('WINNERS',len(winners))
+          for w in winners[:200]: print(w)
+          if not winners: raise SystemExit('no exact CRC winner')
+          # Save concise neighborhoods for manual disambiguation if Base64 deletion has quartet-equivalent ties.
+          for p,ch,*_ in winners[:40]:
+              print('CTX',p,ch,s[max(0,p-24):p]+'['+ch+']'+s[p+1:p+25])
+          PY
