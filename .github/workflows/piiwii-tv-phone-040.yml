@@ -5,6 +5,7 @@ on:
     branches: [ piiwii-tv-phone-040 ]
     paths:
       - 'piiwii-tv-phone-040-ci/**'
+      - 'piiwii-tv-phone-040-tail/**'
       - '.github/workflows/piiwii-tv-phone-040.yml'
   workflow_dispatch:
 
@@ -46,7 +47,17 @@ jobs:
       - name: Restore 0.4.0 source
         run: |
           set -euo pipefail
-          cat piiwii-tv-phone-040-ci/src.part* | tr -d '\r\n\t ' | base64 --decode --ignore-garbage > /tmp/piiwii-tv-phone-0.4.0.zip
+          {
+            cat piiwii-tv-phone-040-ci/src.part00
+            cat piiwii-tv-phone-040-ci/src.part01
+            cat piiwii-tv-phone-040-ci/src.part02
+            cat piiwii-tv-phone-040-tail/tail.part00
+            cat piiwii-tv-phone-040-tail/tail.part01
+            cat piiwii-tv-phone-040-tail/tail.part02
+            cat piiwii-tv-phone-040-tail/tail.part03
+            cat piiwii-tv-phone-040-tail/tail.part04
+          } | base64 --decode > /tmp/piiwii-tv-phone-0.4.0.zip
+          echo '0c317305987b5d564a4a7732557b57a27feddd36254ed4c33423ac0199a5e6db  /tmp/piiwii-tv-phone-0.4.0.zip' | sha256sum -c -
           unzip -t /tmp/piiwii-tv-phone-0.4.0.zip
           unzip -q /tmp/piiwii-tv-phone-0.4.0.zip
           test -f piiwii-tv-phone-0.4.0/app/build.gradle
