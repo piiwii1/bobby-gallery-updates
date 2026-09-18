@@ -1,0 +1,93 @@
+name: Repair PiiWii TV Phone 0.5.0 source chunks
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths:
+      - '.github/workflows/repair-piiwii-tv-phone-050-b64.yml'
+  workflow_dispatch:
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare repair regions and recover exact ZIP
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, difflib, itertools
+          d=pathlib.Path('piiwii-tv-phone-050-ci')
+          target='631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07'
+          def read(n):
+              s=(d/n).read_text(errors='replace')
+              return ''.join(c for c in s if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+          variants={
+            '00orig': read('src.part00'),
+            '00fix': read('fix00a')+read('fix00b'),
+            '04orig': read('src.part04'),
+            '04fix': read('fix04a')+read('fix04b'),
+            '06orig': read('src.part06'),
+            '06fix': read('fix06a')+read('fix06b'),
+          }
+          for key in ['00','04','06']:
+              a=variants[key+'orig']; b=variants[key+'fix']
+              sm=difflib.SequenceMatcher(None,a,b,autojunk=False)
+              print('\nDIFF',key,'orig',len(a),'fix',len(b))
+              for tag,i1,i2,j1,j2 in sm.get_opcodes():
+                  if tag!='equal': print(tag,'orig',i1,i2,repr(a[i1:i2]),'fix',j1,j2,repr(b[j1:j2]))
+          middle1=[read(f'src.part0{i}') for i in [1,2,3]]
+          p5=read('src.part05'); p7=read('src.part07'); p8=read('src.part08')
+          def digest(s):
+              try:
+                  b=base64.b64decode(s,validate=True)
+              except Exception:
+                  return None,None
+              return hashlib.sha256(b).hexdigest(),b
+          # First: try each 00 deletion with orig/fix 04 and original 06.
+          for label00,s00 in [('orig',variants['00orig']),('fix',variants['00fix'])]:
+            if len(s00)!=8001: continue
+            for del0 in range(len(s00)):
+              a00=s00[:del0]+s00[del0+1:]
+              for label04,s04 in [('orig',variants['04orig']),('fix',variants['04fix'])]:
+                joined=a00+''.join(middle1)+s04+p5+variants['06orig']+p7+p8
+                if len(joined)!=66892: continue
+                h,b=digest(joined)
+                if h==target:
+                  pathlib.Path('/tmp/PiiWii-TV-Phone-0.5.0-Sources.zip').write_bytes(b)
+                  print('FOUND exact source ZIP: 00',label00,'delete',del0,repr(s00[del0]),'04',label04,'06 orig')
+                  print('size',len(b),'sha256',h)
+                  raise SystemExit(0)
+          # If not found, derive insertion candidates for 06fix from SequenceMatcher non-equal zones,
+          # then test deleting 2 chars there + one char from 00.
+          a=variants['06orig']; b=variants['06fix']
+          candidate06=set()
+          for tag,i1,i2,j1,j2 in difflib.SequenceMatcher(None,a,b,autojunk=False).get_opcodes():
+              if tag!='equal':
+                  lo=max(0,j1-3); hi=min(len(b),j2+3)
+                  candidate06.update(range(lo,hi))
+          print('06 candidate deletion positions',sorted(candidate06))
+          cand=sorted(candidate06)
+          for xidx,x in enumerate(cand):
+            for y in cand[xidx+1:]:
+              s06=b[:x]+b[x+1:y]+b[y+1:]
+              if len(s06)!=8000: continue
+              for label00,s00 in [('orig',variants['00orig']),('fix',variants['00fix'])]:
+                for del0 in range(len(s00)):
+                  a00=s00[:del0]+s00[del0+1:]
+                  for label04,s04 in [('orig',variants['04orig']),('fix',variants['04fix'])]:
+                    joined=a00+''.join(middle1)+s04+p5+s06+p7+p8
+                    if len(joined)!=66892: continue
+                    h,bb=digest(joined)
+                    if h==target:
+                      pathlib.Path('/tmp/PiiWii-TV-Phone-0.5.0-Sources.zip').write_bytes(bb)
+                      print('FOUND exact source ZIP: 00',label00,'delete',del0,repr(s00[del0]),'04',label04,'06fix delete',x,y,repr(b[x]),repr(b[y]))
+                      print('size',len(bb),'sha256',h)
+                      raise SystemExit(0)
+          print('NOT FOUND')
+          raise SystemExit(2)
+          PY
+      - name: Validate recovered ZIP
+        run: |
+          set -euo pipefail
+          echo '631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07  /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip' | sha256sum -c -
+          unzip -t /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
