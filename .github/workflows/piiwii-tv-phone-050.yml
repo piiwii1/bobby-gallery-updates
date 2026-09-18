@@ -43,13 +43,26 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Restore 0.5.0 binary source archive
+      - name: Restore exact 0.5.0 source ZIP
         run: |
           set -euo pipefail
-          SRC='piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz'
-          test -s "$SRC"
-          xz -t "$SRC"
-          tar -xJf "$SRC"
+          cat \
+            piiwii-tv-phone-050-ci/fix00a \
+            piiwii-tv-phone-050-ci/fix00b \
+            piiwii-tv-phone-050-ci/src.part01 \
+            piiwii-tv-phone-050-ci/src.part02 \
+            piiwii-tv-phone-050-ci/src.part03 \
+            piiwii-tv-phone-050-ci/fix04a \
+            piiwii-tv-phone-050-ci/fix04b \
+            piiwii-tv-phone-050-ci/src.part05 \
+            piiwii-tv-phone-050-ci/fix06a \
+            piiwii-tv-phone-050-ci/fix06b \
+            piiwii-tv-phone-050-ci/src.part07 \
+            piiwii-tv-phone-050-ci/src.part08 \
+            | base64 --decode --ignore-garbage > /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          echo '631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07  /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip' | sha256sum -c -
+          unzip -t /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip >/dev/null
+          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
           test -f piiwii-tv-phone-0.5.0/app/build.gradle
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/RecordingService.java
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/ScheduleSyncJobService.java
