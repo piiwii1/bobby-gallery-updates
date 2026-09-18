@@ -36,20 +36,30 @@ jobs:
           test -f "$ANDROID_HOME/platforms/android-35/android.jar"
           test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
           test -x "$ANDROID_HOME/build-tools/35.0.0/zipalign"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
 
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Restore exact 0.5.0 source
+      - name: Restore verified 0.5.0 source ZIP
         run: |
           set -euo pipefail
-          SRC='piiwii-tv-phone-050-ci/PiiWii-TV-Phone-0.5.0-Sources.tar.xz'
-          test -s "$SRC"
-          sha256sum "$SRC"
-          tar -tJf "$SRC" >/dev/null
-          tar -xJf "$SRC"
+          cat \
+            piiwii-tv-phone-050-ci/src.part00 \
+            piiwii-tv-phone-050-ci/src.part01 \
+            piiwii-tv-phone-050-ci/src.part02 \
+            piiwii-tv-phone-050-ci/src.part03 \
+            piiwii-tv-phone-050-ci/src.part04 \
+            piiwii-tv-phone-050-ci/src.part05 \
+            piiwii-tv-phone-050-ci/src.part06 \
+            piiwii-tv-phone-050-ci/src.part07 \
+            piiwii-tv-phone-050-ci/src.part08 \
+            | base64 --decode > /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
+          echo '631c90b2ec62f65a557421f9aeab1228c8e1190272de4b53cdd3b49a7298ce07  /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip' | sha256sum -c -
+          unzip -t /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip >/dev/null
+          unzip -q /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
           test -f piiwii-tv-phone-0.5.0/app/build.gradle
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/RecordingService.java
           test -f piiwii-tv-phone-0.5.0/app/src/main/java/ch/piiwii/tvphone/ScheduleSyncJobService.java
@@ -81,6 +91,7 @@ jobs:
           grep -F "package: name='ch.piiwii.tvphone'" badging.txt
           grep -F "versionCode='5'" badging.txt
           grep -F "versionName='0.5.0'" badging.txt
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee apksigner-debug.txt
           unzip -t "$APK" > unzip.txt
           mkdir -p out
           cp "$APK" out/PiiWii-TV-Phone-0.5.0-debug.apk
@@ -94,6 +105,8 @@ jobs:
             echo 'Remote schedule polling: JobScheduler.'
             echo
             cat badging.txt
+            echo
+            cat apksigner-debug.txt
             echo
             cat zipalign.txt
             echo
