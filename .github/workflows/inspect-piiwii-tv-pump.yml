@@ -1,0 +1,22 @@
+name: Inspect PiiWii TV Cloud pump
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/inspect-piiwii-tv-pump.yml' ]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 'https://piiwii.ch/wp-content/plugins/geek-tv/assets/piiwii-tv.js?ver=0.6.104' -o /tmp/tv.js
+          python3 - <<'PY'
+          from pathlib import Path
+          L=Path('/tmp/tv.js').read_text(errors='ignore').splitlines()
+          for needle in ['function pumpCloudHls','recording-session/${encodeURIComponent(session.serverId)}/pump']:
+            for i,x in enumerate(L):
+              if needle in x:
+                print('\n===',needle,'line',i+1,'===')
+                for j in range(max(0,i-10),min(len(L),i+70)): print(f'{j+1}: {L[j]}')
+          PY
