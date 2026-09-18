@@ -1,0 +1,48 @@
+name: Diagnose PiiWii TV Phone 0.5.0 source chunks
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths:
+      - '.github/workflows/diagnose-piiwii-tv-phone-050-b64.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose chunks
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, re
+          d=pathlib.Path('piiwii-tv-phone-050-ci')
+          names=['fix00a','fix00b','src.part01','src.part02','src.part03','fix04a','fix04b','src.part05','fix06a','fix06b','src.part07','src.part08']
+          allowed=set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\r\n\t ')
+          chunks=[]
+          for n in names:
+              s=(d/n).read_text(errors='replace')
+              bad=[(i,repr(c)) for i,c in enumerate(s) if c not in allowed]
+              useful=''.join(c for c in s if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+              print(n, 'raw=',len(s),'useful=',len(useful),'bad=',len(bad),'head=',repr(useful[:12]),'tail=',repr(useful[-12:]))
+              if bad[:10]: print(' BAD',bad[:10])
+              chunks.append(useful)
+          joined=''.join(chunks)
+          print('JOINED useful length',len(joined),'mod4',len(joined)%4,'equals_expected_66892',len(joined)==66892)
+          print('padding positions', [i for i,c in enumerate(joined) if c=='='][-20:])
+          # Try strict decode and report decoded size/hash.
+          for label,s in [('joined',joined),('no_internal_padding',joined.replace('=',''))]:
+              ss=s
+              if label=='no_internal_padding':
+                  ss += '='*((4-len(ss)%4)%4)
+              try:
+                  b=base64.b64decode(ss,validate=True)
+                  print(label,'decoded',len(b),'sha256',hashlib.sha256(b).hexdigest(),'ziphead',b[:4])
+              except Exception as e: print(label,'decode_error',repr(e))
+          # Original part files diagnostic too.
+          print('ORIGINAL PARTS')
+          for p in sorted(d.glob('src.part*')):
+              s=p.read_text(errors='replace')
+              u=''.join(c for c in s if c in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
+              print(p.name,'raw=',len(s),'useful=',len(u),'tail=',repr(u[-12:]))
+          PY
