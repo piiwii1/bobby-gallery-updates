@@ -1,0 +1,67 @@
+name: Repair PiiWii TV Phone 0.5.0 sources
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths:
+      - '.github/workflows/repair-piiwii-tv-phone-050.yml'
+  workflow_dispatch:
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose and test candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=piiwii-tv-phone-050-ci
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,zipfile,io,itertools,hashlib
+          D=Path('piiwii-tv-phone-050-ci')
+          def useful(path):
+              s=Path(path).read_text(errors='ignore')
+              return ''.join(re.findall(r'[A-Za-z0-9+/=]',s))
+          orig=[]
+          for i in range(9):
+              p=D/f'src.part{i:02d}'
+              s=useful(p)
+              orig.append(s)
+              print(f'{p.name}: useful={len(s)} first={s[:24]} last={s[-24:]}')
+          joined=''.join(orig)
+          print('JOIN useful=',len(joined),'mod4=',len(joined)%4)
+          pref=useful(D/'sources.zip.b64')
+          print('PREFIX useful=',len(pref),'common prefix=',next((i for i,(a,b) in enumerate(zip(joined,pref)) if a!=b),min(len(joined),len(pref))))
+          for idx in (0,4,6):
+              fx=useful(D/f'fix{idx:02d}a')+useful(D/f'fix{idx:02d}b')
+              oo=orig[idx]
+              print(f'FIX {idx}: orig={len(oo)} fix={len(fx)}')
+              # edit-window summary
+              import difflib
+              sm=difflib.SequenceMatcher(None,oo,fx,autojunk=False)
+              for tag,a,b,c,d in sm.get_opcodes():
+                  if tag!='equal': print(' ',tag,a,b,c,d,'orig=',oo[max(0,a-12):min(len(oo),b+12)],'fix=',fx[max(0,c-12):min(len(fx),d+12)])
+          variants={0:[orig[0],useful(D/'fix00a')+useful(D/'fix00b')],
+                    4:[orig[4],useful(D/'fix04a')+useful(D/'fix04b')],
+                    6:[orig[6],useful(D/'fix06a')+useful(D/'fix06b')]}
+          print('--- candidate test ---')
+          for bits in itertools.product([0,1], repeat=3):
+              arr=orig.copy()
+              for idx,b in zip((0,4,6),bits): arr[idx]=variants[idx][b]
+              s=''.join(arr)
+              label=''.join(map(str,bits))
+              print('candidate',label,'len',len(s),'mod4',len(s)%4,end=' ')
+              try:
+                  raw=base64.b64decode(s,validate=True)
+                  print('decoded',len(raw),'sha',hashlib.sha256(raw).hexdigest(),end=' ')
+                  z=zipfile.ZipFile(io.BytesIO(raw))
+                  bad=z.testzip()
+                  print('zip_entries',len(z.infolist()),'bad',bad)
+                  if bad is None:
+                      Path(f'/tmp/recovered-{label}.zip').write_bytes(raw)
+                      print('VALID_CANDIDATE',label)
+              except Exception as e:
+                  print('ERR',type(e).__name__,str(e)[:120])
+          PY
