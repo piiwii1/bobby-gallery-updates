@@ -1,0 +1,72 @@
+name: Locate PiiWii TV Phone 0.5.0 Base64 extras
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: ['.github/workflows/locate-piiwii-tv-phone-050-extra.yml']
+  workflow_dispatch:
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,struct,zlib,binascii
+          D=Path('piiwii-tv-phone-050-ci')
+          def u(p): return ''.join(re.findall(r'[A-Za-z0-9+/=]',Path(p).read_text(errors='ignore')))
+          a=[u(D/f'src.part{i:02d}') for i in range(9)]
+          a[4]=u(D/'fix04a')+u(D/'fix04b')
+          a[6]=u(D/'fix06a')+u(D/'fix06b')
+          s=''.join(a)
+          print('corrected-known length',len(s),'equals',[(i,c) for i,c in enumerate(s) if c=='='][-20:])
+          # make decodable by dropping 3 chars immediately before final ==; this preserves prefix before the first true insertion
+          core=s[:-2]
+          test=core[:-3]+'=='
+          raw=base64.b64decode(test,validate=True)
+          print('decoded baseline',len(raw),raw[:8])
+          def parse(raw, verbose=True):
+              off=0; entries=[]
+              while off+4<=len(raw):
+                  sig=raw[off:off+4]
+                  if sig==b'PK\x01\x02':
+                      if verbose: print('CENTRAL at',off,'entries',len(entries));
+                      return entries,off,'central'
+                  if sig==b'PK\x05\x06':
+                      if verbose: print('EOCD at',off,'entries',len(entries));
+                      return entries,off,'eocd'
+                  if sig!=b'PK\x03\x04':
+                      if verbose: print('BAD SIG at',off,sig.hex(),'after',len(entries),'entries')
+                      return entries,off,'badsig'
+                  if off+30>len(raw): return entries,off,'shortheader'
+                  vals=struct.unpack_from('<IHHHHHIIIHH',raw,off)
+                  _,ver,flag,method,tm,dt,crc,cs,us,nl,xl=vals
+                  ns=off+30; ds=ns+nl+xl; de=ds+cs
+                  name=raw[ns:ns+nl]
+                  if de>len(raw):
+                      if verbose: print('SHORT DATA',off,name,cs,'need',de,'have',len(raw))
+                      return entries,off,'shortdata'
+                  data=raw[ds:de]
+                  ok=None
+                  try:
+                      if method==0: dec=data
+                      elif method==8: dec=zlib.decompress(data,-15)
+                      else: dec=None
+                      if dec is not None: ok=(len(dec)==us and (binascii.crc32(dec)&0xffffffff)==crc)
+                  except Exception as e: ok=False
+                  entries.append((off,de,name.decode(errors='replace'),method,cs,us,ok))
+                  if verbose: print(len(entries),off,de,name.decode(errors='replace'),'m',method,'c',cs,'u',us,'crcok',ok)
+                  if ok is False:
+                      return entries,off,'badcrc'
+                  off=de
+              return entries,off,'end'
+          ent,off,why=parse(raw,True)
+          print('FIRST FAILURE',why,'byte',off,'approx b64',off*4//3)
+          # dump b64 neighbourhood around mapped location
+          p=off*4//3
+          print('B64 window',max(0,p-120),min(len(s),p+240),s[max(0,p-120):min(len(s),p+240)])
+          PY
