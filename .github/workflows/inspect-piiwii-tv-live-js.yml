@@ -1,0 +1,32 @@
+name: Inspect PiiWii TV live JS DVR calls
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/inspect-piiwii-tv-live-js.yml' ]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public TV scripts
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 'https://piiwii.ch/tv/' -o /tmp/tv.html
+          python3 - <<'PY'
+          import re,html,urllib.parse
+          s=open('/tmp/tv.html',errors='ignore').read()
+          urls=[]
+          for x in re.findall(r'<script[^>]+src=["\']([^"\']+)',s,re.I):
+              x=html.unescape(x)
+              urls.append(urllib.parse.urljoin('https://piiwii.ch/tv/',x))
+          print('\n'.join(urls))
+          open('/tmp/jsurls','w').write('\n'.join(urls))
+          PY
+          n=0
+          while IFS= read -r url; do
+            n=$((n+1)); f="/tmp/js-$n.js"; curl -fsSL --max-time 30 "$url" -o "$f" || continue
+            if grep -Eqi 'recording-session|/schedules|pair/exchange|pairing-code|/recordings' "$f"; then
+              echo; echo "===== $url ====="
+              grep -Ein -C 12 'recording-session|/schedules|pair/exchange|pairing-code|/recordings' "$f" | head -c 60000 || true
+            fi
+          done < /tmp/jsurls
