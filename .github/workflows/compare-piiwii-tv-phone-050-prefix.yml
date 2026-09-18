@@ -1,0 +1,25 @@
+name: Compare PiiWii TV Phone 0.5.0 prefix
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths: [ '.github/workflows/compare-piiwii-tv-phone-050-prefix.yml' ]
+  workflow_dispatch:
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          import pathlib,difflib
+          d=pathlib.Path('piiwii-tv-phone-050-ci')
+          chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+          def r(n): return ''.join(c for c in (d/n).read_text(errors='replace') if c in chars)
+          a=r('sources.zip.b64')
+          b=(r('src.part00')+r('src.part01'))[:len(a)]
+          print('independent',len(a),'parts-prefix',len(b))
+          for tag,i1,i2,j1,j2 in difflib.SequenceMatcher(None,a,b,autojunk=False).get_opcodes():
+              if tag!='equal': print(tag,i1,i2,j1,j2,'INDEP=',repr(a[i1:i2]),'PARTS=',repr(b[j1:j2]))
+          print('A head/tail',repr(a[:20]),repr(a[-20:]))
+          print('B head/tail',repr(b[:20]),repr(b[-20:]))
+          PY
