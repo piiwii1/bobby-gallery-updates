@@ -1,0 +1,45 @@
+name: Extract PiiWii TV Phone 0.4.0 sources
+
+on:
+  push:
+    branches: [ piiwii-tv-phone-050 ]
+    paths:
+      - '.github/workflows/extract-piiwii-tv-phone-040.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore proven 0.4.0 source
+        run: |
+          set -euo pipefail
+          {
+            cat piiwii-tv-phone-040-ci/src.part00
+            cat piiwii-tv-phone-040-ci/src.part01
+            cat piiwii-tv-phone-040-ci/src.part02
+            cat piiwii-tv-phone-040-tail/tail.part00
+            cat piiwii-tv-phone-040-tail/tail.part01
+            cat piiwii-tv-phone-040-tail/tail.part02
+            cat piiwii-tv-phone-040-tail/tail.part03
+            cat piiwii-tv-phone-040-tail/tail.part04
+          } | base64 --decode > /tmp/piiwii-tv-phone-0.4.0.zip
+          echo '0c317305987b5d564a4a7732557b57a27feddd36254ed4c33423ac0199a5e6db  /tmp/piiwii-tv-phone-0.4.0.zip' | sha256sum -c -
+          unzip -q /tmp/piiwii-tv-phone-0.4.0.zip
+          test -f piiwii-tv-phone-0.4.0/app/src/main/java/ch/piiwii/tvphone/MainActivity.java
+      - name: Commit source tree
+        run: |
+          set -euo pipefail
+          rm -rf piiwii-tv-phone-source
+          mv piiwii-tv-phone-0.4.0 piiwii-tv-phone-source
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add piiwii-tv-phone-source
+          git commit -m 'Add proven PiiWii TV Phone source tree' || exit 0
+          git push origin HEAD:piiwii-tv-phone-050
