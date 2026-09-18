@@ -47,13 +47,16 @@ jobs:
         run: |
           set -euo pipefail
           cat \
-            piiwii-tv-phone-050-ci/src.part00 \
+            piiwii-tv-phone-050-ci/fix00a \
+            piiwii-tv-phone-050-ci/fix00b \
             piiwii-tv-phone-050-ci/src.part01 \
             piiwii-tv-phone-050-ci/src.part02 \
             piiwii-tv-phone-050-ci/src.part03 \
-            piiwii-tv-phone-050-ci/src.part04 \
+            piiwii-tv-phone-050-ci/fix04a \
+            piiwii-tv-phone-050-ci/fix04b \
             piiwii-tv-phone-050-ci/src.part05 \
-            piiwii-tv-phone-050-ci/src.part06 \
+            piiwii-tv-phone-050-ci/fix06a \
+            piiwii-tv-phone-050-ci/fix06b \
             piiwii-tv-phone-050-ci/src.part07 \
             piiwii-tv-phone-050-ci/src.part08 \
             | base64 --decode > /tmp/PiiWii-TV-Phone-0.5.0-Sources.zip
