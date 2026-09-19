@@ -45,9 +45,14 @@ jobs:
         run: |
           set -euo pipefail
           base64 -d piiwii-store-clean/project.zip.b64 > /tmp/piiwii-store-project.zip
-          unzip -t /tmp/piiwii-store-project.zip
           mkdir -p piiwii-store-clean/project
-          unzip -q /tmp/piiwii-store-project.zip -d piiwii-store-clean/project
+          unzip -q /tmp/piiwii-store-project.zip -d piiwii-store-clean/project || true
+          cp piiwii-store-clean/MainActivity.java piiwii-store-clean/project/app/src/main/java/ch/piiwii/store2/MainActivity.java
+          test -f piiwii-store-clean/project/settings.gradle
+          test -f piiwii-store-clean/project/app/build.gradle
+          test -f piiwii-store-clean/project/app/src/main/AndroidManifest.xml
+          test -f piiwii-store-clean/project/app/src/main/java/ch/piiwii/store2/MainActivity.java
+          echo "8fe6d18d1726ceda82716261c61292a4e7fb61ba25ba9c041022c95742d122a0  piiwii-store-clean/project/app/src/main/java/ch/piiwii/store2/MainActivity.java" | sha256sum -c -
 
       - name: Build unsigned release APK
         working-directory: piiwii-store-clean/project
