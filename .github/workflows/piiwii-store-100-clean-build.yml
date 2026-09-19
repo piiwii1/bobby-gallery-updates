@@ -1,0 +1,72 @@
+name: PiiWii Store 1.0.0 Clean Build
+
+on:
+  push:
+    branches: [ piiwii-store-100-build ]
+    paths:
+      - 'piiwii-store-clean/**'
+      - '.github/workflows/piiwii-store-100-clean-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Expand clean project
+        run: |
+          mkdir -p piiwii-store-clean/project
+          unzip -q piiwii-store-clean/project.zip -d piiwii-store-clean/project
+
+      - name: Build unsigned release APK
+        working-directory: piiwii-store-clean/project
+        run: gradle --no-daemon --stacktrace assembleRelease
+
+      - name: Verify package and prepare local-signing bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=piiwii-store-clean/project/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -1 | tee /tmp/badging.txt
+          grep -q "package: name='ch.piiwii.store2'" /tmp/badging.txt
+          grep -q "versionCode='1'" /tmp/badging.txt
+          grep -q "versionName='1.0.0'" /tmp/badging.txt
+          mkdir -p out
+          cp "$APK" out/PiiWii-Store-1.0.0-unsigned.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/apksigner.jar
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/zipalign
+          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" out/aapt
+          chmod +x out/zipalign out/aapt
+          sha256sum out/* > out/SHA256SUMS.txt
+
+      - name: Upload build bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Store-1.0.0-clean-unsigned
+          path: out/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
