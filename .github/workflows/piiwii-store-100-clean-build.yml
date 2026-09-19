@@ -48,6 +48,7 @@ jobs:
           mkdir -p piiwii-store-clean/project
           unzip -q /tmp/piiwii-store-project.zip -d piiwii-store-clean/project || true
           cp piiwii-store-clean/MainActivity.java piiwii-store-clean/project/app/src/main/java/ch/piiwii/store2/MainActivity.java
+          printf 'android.useAndroidX=true\n' > piiwii-store-clean/project/gradle.properties
           test -f piiwii-store-clean/project/settings.gradle
           test -f piiwii-store-clean/project/app/build.gradle
           test -f piiwii-store-clean/project/app/src/main/AndroidManifest.xml
