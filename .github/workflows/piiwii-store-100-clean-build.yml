@@ -24,14 +24,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Ensure Android SDK 35
+      - name: Check preinstalled Android SDK 35
         shell: bash
         run: |
           set -euo pipefail
           ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           test -n "$ROOT"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          test -f "$ROOT/platforms/android-35/android.jar"
+          test -x "$ROOT/build-tools/35.0.0/aapt"
+          test -f "$ROOT/build-tools/35.0.0/lib/apksigner.jar"
+          echo "ANDROID_SDK_ROOT=$ROOT" >> "$GITHUB_ENV"
 
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -51,7 +53,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          ROOT="$ANDROID_SDK_ROOT"
           APK=piiwii-store-clean/project/app/build/outputs/apk/release/app-release-unsigned.apk
           test -f "$APK"
           "$ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | head -1 | tee /tmp/badging.txt
