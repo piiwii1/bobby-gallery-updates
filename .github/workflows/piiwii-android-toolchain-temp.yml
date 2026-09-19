@@ -46,3 +46,5 @@ jobs:
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
+
+# retrigger 2026-09-19 for PiiWii Store 1.6.0
