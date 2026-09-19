@@ -40,10 +40,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Expand clean project
+      - name: Expand verified clean project
+        shell: bash
         run: |
+          set -euo pipefail
+          base64 -d piiwii-store-clean/project.zip.b64 > /tmp/piiwii-store-project.zip
+          echo "e0e4755c41b6cf4e8aea9b02462f6a70ab738273a170810bf27ad3a9dd652788  /tmp/piiwii-store-project.zip" | sha256sum -c -
           mkdir -p piiwii-store-clean/project
-          unzip -q piiwii-store-clean/project.zip -d piiwii-store-clean/project
+          unzip -q /tmp/piiwii-store-project.zip -d piiwii-store-clean/project
 
       - name: Build unsigned release APK
         working-directory: piiwii-store-clean/project
@@ -65,6 +69,7 @@ jobs:
           cp "$ROOT/build-tools/35.0.0/lib/apksigner.jar" out/apksigner.jar
           cp "$ROOT/build-tools/35.0.0/zipalign" out/zipalign
           cp "$ROOT/build-tools/35.0.0/aapt" out/aapt
+          cp "$ROOT/build-tools/35.0.0/lib64/libc++.so" out/libc++.so || true
           chmod +x out/zipalign out/aapt
           sha256sum out/* > out/SHA256SUMS.txt
 
