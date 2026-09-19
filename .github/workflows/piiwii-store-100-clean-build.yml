@@ -24,11 +24,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Ensure Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$ROOT"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
@@ -48,17 +51,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           APK=piiwii-store-clean/project/app/build/outputs/apk/release/app-release-unsigned.apk
           test -f "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -1 | tee /tmp/badging.txt
+          "$ROOT/build-tools/35.0.0/aapt" dump badging "$APK" | head -1 | tee /tmp/badging.txt
           grep -q "package: name='ch.piiwii.store2'" /tmp/badging.txt
           grep -q "versionCode='1'" /tmp/badging.txt
           grep -q "versionName='1.0.0'" /tmp/badging.txt
           mkdir -p out
           cp "$APK" out/PiiWii-Store-1.0.0-unsigned.apk
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" out/apksigner.jar
-          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" out/zipalign
-          cp "$ANDROID_HOME/build-tools/35.0.0/aapt" out/aapt
+          cp "$ROOT/build-tools/35.0.0/lib/apksigner.jar" out/apksigner.jar
+          cp "$ROOT/build-tools/35.0.0/zipalign" out/zipalign
+          cp "$ROOT/build-tools/35.0.0/aapt" out/aapt
           chmod +x out/zipalign out/aapt
           sha256sum out/* > out/SHA256SUMS.txt
 
