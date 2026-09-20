@@ -25,16 +25,17 @@ jobs:
             sdkmanager "platforms;android-35" "build-tools;35.0.0"
           fi
           PLATFORM="$ROOT/platforms/android-35/android.jar"
-          mkdir -p out
+          mkdir -p out/lib64
           cp "$BT/aapt2" out/aapt2
           cp "$BT/aapt" out/aapt
           cp "$BT/zipalign" out/zipalign
           cp "$BT/lib/d8.jar" out/d8.jar
           cp "$BT/lib/apksigner.jar" out/apksigner.jar
+          cp "$BT/lib64/libc++.so" out/lib64/libc++.so
           cp "$PLATFORM" out/android.jar
           chmod +x out/aapt out/aapt2 out/zipalign
-          sha256sum out/* > out/SHA256SUMS.txt
-          ls -lh out
+          sha256sum out/aapt out/aapt2 out/zipalign out/d8.jar out/apksigner.jar out/lib64/libc++.so out/android.jar > out/SHA256SUMS.txt
+          ls -lh out out/lib64
           java -cp out/d8.jar com.android.tools.r8.D8 --version
           java -cp out/apksigner.jar com.android.apksigner.ApkSignerTool --version
 
@@ -47,4 +48,4 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-# retrigger 2026-09-19 for PiiWii Store 1.6.0
+# retrigger 2026-09-21 for Calculatrice 0.1.0
