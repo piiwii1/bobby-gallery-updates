@@ -55,21 +55,31 @@ jobs:
           EOF
           cd /tmp/warm
           gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Package build environment
+      - name: Package split build environment
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/piiwii-build-env/sdk/build-tools /tmp/piiwii-build-env/sdk/platforms /tmp/piiwii-build-env/gradle
-          cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" /tmp/piiwii-build-env/sdk/build-tools/
-          cp -a "$ANDROID_SDK_ROOT/platforms/android-35" /tmp/piiwii-build-env/sdk/platforms/
-          curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/piiwii-build-env/gradle/gradle-8.9-bin.zip
-          cp -a "$HOME/.gradle/caches" /tmp/piiwii-build-env/gradle/
-          find /tmp/piiwii-build-env -type f | sort > /tmp/piiwii-build-env/CONTENTS.txt
-          du -sh /tmp/piiwii-build-env
+          mkdir -p /tmp/piiwii-gradle-core/caches /tmp/piiwii-gradle-runtime/caches
+          curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/piiwii-gradle-core/gradle-8.9-bin.zip
+          cp -a "$HOME/.gradle/caches/modules-2" /tmp/piiwii-gradle-core/caches/
+          cp -a "$HOME/.gradle/caches/8.9" /tmp/piiwii-gradle-runtime/caches/
+          for d in jars-* transforms-*; do
+            for p in "$HOME/.gradle/caches"/$d; do
+              [ -e "$p" ] && cp -a "$p" /tmp/piiwii-gradle-runtime/caches/
+            done
+          done
+          du -sh /tmp/piiwii-gradle-core /tmp/piiwii-gradle-runtime
       - uses: actions/upload-artifact@v4
         with:
-          name: piiwii-tv-android-build-env
-          path: /tmp/piiwii-build-env/
+          name: piiwii-tv-gradle-core
+          path: /tmp/piiwii-gradle-core/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piiwii-tv-gradle-runtime
+          path: /tmp/piiwii-gradle-runtime/
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
