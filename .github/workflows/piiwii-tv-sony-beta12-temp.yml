@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'temp-piiwii-tv-sony-beta12/source.zip.b64'
+      - 'temp-piiwii-tv-sony-beta12/BUILD_TRIGGER.txt'
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/piiwii-tv-sony-beta12
-          base64 -d temp-piiwii-tv-sony-beta12/source.zip.b64 > /tmp/source.zip
+          cat temp-piiwii-tv-sony-beta12/source.zip.b64.part-* | base64 -d > /tmp/source.zip
           echo '462157eca20bff81a210b2d76fa07f17616270381afc7157d9fa5e68b40cc325  /tmp/source.zip' | sha256sum -c -
           unzip -q /tmp/source.zip -d /tmp/piiwii-tv-sony-beta12
           grep -q 'versionCode = 12' /tmp/piiwii-tv-sony-beta12/app/build.gradle.kts
