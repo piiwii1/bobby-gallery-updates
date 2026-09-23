@@ -13,14 +13,15 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Restore source
+      - name: Restore and patch source
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/piiwii-tv-sony-beta12
-          cat temp-piiwii-tv-sony-beta12/source.zip.b64.part-* | base64 -d > /tmp/source.zip
-          echo '462157eca20bff81a210b2d76fa07f17616270381afc7157d9fa5e68b40cc325  /tmp/source.zip' | sha256sum -c -
-          unzip -q /tmp/source.zip -d /tmp/piiwii-tv-sony-beta12
+          cat temp-piiwii-tv-sony-beta12/base.zip.b64.part-* | base64 -d > /tmp/base.zip
+          echo '1117c564d26aa781f506b6ef3477f99e2eb49e418a82aeed389ec51e68e22163  /tmp/base.zip' | sha256sum -c -
+          unzip -q /tmp/base.zip -d /tmp/piiwii-tv-sony-beta12
+          (cd /tmp/piiwii-tv-sony-beta12 && patch -p1 < "$GITHUB_WORKSPACE/temp-piiwii-tv-sony-beta12/beta12.patch")
           grep -q 'versionCode = 12' /tmp/piiwii-tv-sony-beta12/app/build.gradle.kts
           grep -q 'OVERLAY_TIMEOUT_MS = 4000L' /tmp/piiwii-tv-sony-beta12/app/src/main/java/ch/piiwii/tv/sony/PlayerActivity.java
           grep -q 'TF1 Séries Films' /tmp/piiwii-tv-sony-beta12/app/src/main/java/ch/piiwii/tv/sony/BraviaWebActivity.java
@@ -44,7 +45,7 @@ jobs:
           set -euo pipefail
           mkdir -p delivery
           cp /tmp/piiwii-tv-sony-beta12/app/build/outputs/apk/debug/app-debug.apk delivery/PiiWii-TV-Sony-Bravia-1.0.0-beta12-CI.apk
-          cp /tmp/source.zip delivery/PiiWii-TV-Sony-Bravia-1.0.0-beta12-SOURCES.zip
+          (cd /tmp/piiwii-tv-sony-beta12 && zip -qr "$GITHUB_WORKSPACE/delivery/PiiWii-TV-Sony-Bravia-1.0.0-beta12-SOURCES.zip" . -x 'app/build/*' '.gradle/*')
           sha256sum delivery/* > delivery/SHA256SUMS.txt
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs delivery/PiiWii-TV-Sony-Bravia-1.0.0-beta12-CI.apk > delivery/CI-SIGNATURE.txt
       - uses: actions/upload-artifact@v4
