@@ -1,0 +1,244 @@
+diff -ruN a/app/build.gradle.kts b/app/build.gradle.kts
+--- a/app/build.gradle.kts	2026-09-23 16:41:54.279968678 +0000
++++ b/app/build.gradle.kts	2026-09-23 17:55:33.035261424 +0000
+@@ -9,8 +9,8 @@
+         minSdk = 21
+         targetSdk = 28
+         multiDexEnabled = true
+-        versionCode = 10
+-        versionName = "1.0.0-beta10"
++        versionCode = 12
++        versionName = "1.0.0-beta12"
+     }
+     lint {
+         checkReleaseBuilds = false
+diff -ruN a/app/src/main/java/ch/piiwii/tv/sony/BraviaWebActivity.java b/app/src/main/java/ch/piiwii/tv/sony/BraviaWebActivity.java
+--- a/app/src/main/java/ch/piiwii/tv/sony/BraviaWebActivity.java	2026-09-23 15:25:29.000000000 +0000
++++ b/app/src/main/java/ch/piiwii/tv/sony/BraviaWebActivity.java	2026-09-23 17:55:33.035587346 +0000
+@@ -241,6 +241,7 @@
+     }
+ 
+     private void buildChannels() {
++        // Catalogue synchronisé avec PiiWii TV : 45 chaînes netplus + Rhône TV.
+         add("rts1", "RTS 1", "rts1hd");
+         add("rts2", "RTS 2", "rts2hd");
+         add("canal9", "Canal9", "canal9");
+@@ -248,18 +249,45 @@
+         add("tf1", "TF1 CH", "tf1hd");
+         add("france2", "France 2", "france2hd");
+         add("france3", "France 3", "france3hd");
++        add("france4", "France 4", "france4hd");
+         add("france5", "France 5", "france5hd");
+         add("m6", "M6 CH", "m6hd");
++        add("arte", "Arte", "artehd");
+         add("tmc", "TMC", "tmc");
+         add("w9", "W9", "w9");
+         add("tfx", "TFX", "nt1");
++        add("tf1seriesfilms", "TF1 Séries Films", "hd1");
+         add("6ter", "6ter CH", "6ter");
+         add("rmcstory", "RMC Story", "numero23");
++        add("rmclife", "RMC Life", "cherie25");
+         add("rmcdecouverte", "RMC Découverte", "rmcdecouverte");
+-        add("arte", "Arte", "artehd");
+         add("bfmtv", "BFM TV", "bfmtv");
+         add("cnews", "CNEWS", "itele");
+         add("lci", "LCI", "lci");
++        add("lequipe", "L’Équipe", "lequipe21");
++        add("cstar", "CStar", "d17");
++        add("gulli", "Gulli", "gulli");
++        add("t18", "T18", "t18");
++        add("novo19", "NOVO19", "novo19");
++        add("lemanbleu", "Léman Bleu", "lemanbleu");
++        add("latele", "La Télé", "latele");
++        add("canalalphaju", "Canal Alpha Jura", "canalalphaju");
++        add("canalalphane", "Canal Alpha Neuchâtel", "canalalphane");
++        add("carac1", "Carac 1", "rougetv");
++        add("carac2", "Carac 2", "onetv");
++        add("carac3", "Carac 3", "lfmtv");
++        add("carac4", "Carac 4", "tvsuisseplus");
++        add("carac5", "Carac 5", "teleswizz");
++        add("nrtv", "NRTV", "nrtv");
++        add("tvm3", "TVM3", "tvm3");
++        add("france24", "France 24", "france24");
++        add("euronews", "Euronews Français", "euronews");
++        add("tv5monde", "TV5MONDE", "tv5mondefbs");
++        add("franceinfo", "franceinfo:", "franceinfo");
++        add("bfmbusiness", "BFM Business", "bfmbusiness");
++        add("lcp", "LCP / Public Sénat", "lcp");
++        add("monacotv", "TVMonaco", "monacotv");
++        add("tv8montblanc", "8 Mont-Blanc", "tv8montblanc");
+     }
+ 
+     private void add(String id, String name, String streamId) {
+diff -ruN a/app/src/main/java/ch/piiwii/tv/sony/LegacyMediaPlayerEngine.java b/app/src/main/java/ch/piiwii/tv/sony/LegacyMediaPlayerEngine.java
+--- a/app/src/main/java/ch/piiwii/tv/sony/LegacyMediaPlayerEngine.java	2026-09-23 14:56:24.000000000 +0000
++++ b/app/src/main/java/ch/piiwii/tv/sony/LegacyMediaPlayerEngine.java	2026-09-23 16:52:40.416754020 +0000
+@@ -42,7 +42,6 @@
+             player.setOnVideoSizeChangedListener(new MediaPlayer.OnVideoSizeChangedListener() {
+                 @Override public void onVideoSizeChanged(MediaPlayer mp, int w, int h) {
+                     if (w > 0 && h > 0) {
+-                        listener.onFirstFrame();
+                         listener.onVideoSize(w, h);
+                     }
+                 }
+diff -ruN a/app/src/main/java/ch/piiwii/tv/sony/Media3Engine.java b/app/src/main/java/ch/piiwii/tv/sony/Media3Engine.java
+--- a/app/src/main/java/ch/piiwii/tv/sony/Media3Engine.java	2026-09-23 15:25:29.000000000 +0000
++++ b/app/src/main/java/ch/piiwii/tv/sony/Media3Engine.java	2026-09-23 16:52:49.020969467 +0000
+@@ -29,9 +29,10 @@
+  * PiiWii Player engine for the legacy Sony Bravia.
+  * The launcher never references this class directly; PlayerActivity reflection-loads it in :player.
+  *
+- * beta9 compatibility rule: a video format being announced is NOT considered a rendered image.
+- * The engine explicitly pins one supported AVC track at a time (low -> medium -> high) so the
++ * beta11 compatibility rule: a video format being announced is NOT considered a rendered image.
++ * The engine explicitly pins one supported AVC track at a time (high -> medium -> low) so the
+  * old Sony decoder does not get stuck on an adaptive profile it can signal but not actually render.
++ * Stages now degrade from higher compatible quality to lower quality, matching the UI labels.
+  */
+ final class Media3Engine implements InternalPlayerEngine {
+     private final ExoPlayer player;
+@@ -153,14 +154,14 @@
+         Collections.sort(choices, new Comparator<Candidate>() {
+             @Override public int compare(Candidate a, Candidate b) {
+                 long aa = a.score(), bb = b.score();
+-                return aa < bb ? -1 : (aa == bb ? 0 : 1);
++                return aa > bb ? -1 : (aa == bb ? 0 : 1);
+             }
+         });
+ 
+         int pick;
+-        if (requestedStage <= 0) pick = 0; // safest / lowest first
++        if (requestedStage <= 0) pick = 0; // highest compatible candidate first
+         else if (requestedStage == 1) pick = Math.min(choices.size() - 1, Math.max(0, choices.size() / 2));
+-        else pick = choices.size() - 1;
++        else pick = choices.size() - 1; // lowest compatible candidate last
+         Candidate chosen = choices.get(pick);
+ 
+         try {
+diff -ruN a/app/src/main/java/ch/piiwii/tv/sony/PlayerActivity.java b/app/src/main/java/ch/piiwii/tv/sony/PlayerActivity.java
+--- a/app/src/main/java/ch/piiwii/tv/sony/PlayerActivity.java	2026-09-23 15:25:29.000000000 +0000
++++ b/app/src/main/java/ch/piiwii/tv/sony/PlayerActivity.java	2026-09-23 17:55:33.035808314 +0000
+@@ -33,6 +33,9 @@
+ 
+     private final Handler main = new Handler(Looper.getMainLooper());
+     private SurfaceView surface;
++    private ImageView watermark;
++    private LinearLayout infoOverlay;
++    private static final long OVERLAY_TIMEOUT_MS = 4000L;
+     private TextView title;
+     private TextView status;
+     private TextView quality;
+@@ -46,6 +49,12 @@
+     private boolean firstFrame = false;
+     private boolean legacyFallback = false;
+     private int playGeneration = 0;
++    private final Runnable hideOverlayRunnable = new Runnable() {
++        @Override public void run() {
++            if (watermark != null) watermark.setVisibility(View.GONE);
++            if (infoOverlay != null) infoOverlay.setVisibility(View.GONE);
++        }
++    };
+ 
+     private final BroadcastReceiver commandReceiver = new BroadcastReceiver() {
+         @Override public void onReceive(Context context, Intent intent) {
+@@ -90,10 +99,9 @@
+         FrameLayout root = new FrameLayout(this);
+         root.setBackgroundColor(Color.BLACK);
+         surface = new SurfaceView(this);
+-        surface.setBackgroundColor(Color.BLACK);
+         root.addView(surface, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+ 
+-        ImageView watermark = new ImageView(this);
++        watermark = new ImageView(this);
+         watermark.setImageResource(R.drawable.piiwii_tv_icon);
+         watermark.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+         watermark.setAlpha(.48f);
+@@ -101,20 +109,32 @@
+         wm.setMargins(dp(18), dp(16), 0, 0);
+         root.addView(watermark, wm);
+ 
+-        LinearLayout info = new LinearLayout(this);
+-        info.setOrientation(LinearLayout.VERTICAL);
+-        info.setPadding(dp(24), dp(14), dp(24), dp(14));
+-        info.setBackgroundColor(Color.argb(205, 3, 12, 21));
++        infoOverlay = new LinearLayout(this);
++        infoOverlay.setOrientation(LinearLayout.VERTICAL);
++        infoOverlay.setPadding(dp(24), dp(14), dp(24), dp(14));
++        infoOverlay.setBackgroundColor(Color.argb(205, 3, 12, 21));
+         title = label("PiiWii Player", 24, Color.WHITE, true);
+         status = label("Initialisation du lecteur intégré…", 14, Color.rgb(190, 207, 222), false);
+         quality = label("", 12, Color.rgb(111, 187, 235), true);
+-        info.addView(title);
+-        info.addView(status);
+-        info.addView(quality);
++        infoOverlay.addView(title);
++        infoOverlay.addView(status);
++        infoOverlay.addView(quality);
+         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
+         lp.setMargins(dp(20), dp(20), dp(20), dp(20));
+-        root.addView(info, lp);
++        root.addView(infoOverlay, lp);
+         setContentView(root);
++        showOverlayTemporarily();
++    }
++
++    private void showOverlayTemporarily() {
++        if (watermark != null) watermark.setVisibility(View.VISIBLE);
++        if (infoOverlay != null) infoOverlay.setVisibility(View.VISIBLE);
++        main.removeCallbacks(hideOverlayRunnable);
++        main.postDelayed(hideOverlayRunnable, OVERLAY_TIMEOUT_MS);
++    }
++
++    private void cancelOverlayTimer() {
++        main.removeCallbacks(hideOverlayRunnable);
+     }
+ 
+     private void readIntent(Intent intent) {
+@@ -193,6 +213,7 @@
+     }
+ 
+     private void changeChannel(int delta) {
++        showOverlayTemporarily();
+         if (urls.isEmpty()) return;
+         index = (index + delta + urls.size()) % urls.size();
+         qualityStage = 0;
+@@ -203,6 +224,7 @@
+     }
+ 
+     private void selectById(String id) {
++        showOverlayTemporarily();
+         if (id == null) return;
+         for (int i = 0; i < ids.size(); i++) {
+             if (id.equalsIgnoreCase(ids.get(i))) {
+@@ -218,6 +240,7 @@
+     }
+ 
+     private void handleRemoteAction(String action) {
++        showOverlayTemporarily();
+         if (action.equals("play_pause")) { try { if (engine != null) engine.togglePlayPause(); } catch (Throwable ignored) {} }
+         else if (action.equals("channel_up")) changeChannel(1);
+         else if (action.equals("channel_down")) changeChannel(-1);
+@@ -232,6 +255,7 @@
+ 
+     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+         if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
++        showOverlayTemporarily();
+         switch (event.getKeyCode()) {
+             case KeyEvent.KEYCODE_CHANNEL_UP: changeChannel(1); return true;
+             case KeyEvent.KEYCODE_CHANNEL_DOWN: changeChannel(-1); return true;
+@@ -267,6 +291,7 @@
+             @Override public void run() {
+                 firstFrame = true;
+                 if (status != null) status.setText("En direct — image OK");
++                showOverlayTemporarily();
+             }
+         });
+     }
+@@ -339,6 +364,7 @@
+     @Override public void onWindowFocusChanged(boolean hasFocus) { super.onWindowFocusChanged(hasFocus); if (hasFocus) immersive(); }
+ 
+     @Override protected void onDestroy() {
++        cancelOverlayTimer();
+         ++playGeneration;
+         main.removeCallbacksAndMessages(null);
+         try { unregisterReceiver(commandReceiver); } catch (Throwable ignored) {}
