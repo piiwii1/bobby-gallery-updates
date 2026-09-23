@@ -1,0 +1,70 @@
+name: PiiWii TV Android Build Env Temp
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/piiwii-tv-build-env-temp.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Warm AGP and Media3 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/warm/app/src/main/java/test/warm
+          cat > /tmp/warm/settings.gradle.kts <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "Warm"
+          include(":app")
+          EOF
+          cat > /tmp/warm/build.gradle.kts <<'EOF'
+          plugins { id("com.android.application") version "8.7.3" apply false }
+          EOF
+          cat > /tmp/warm/app/build.gradle.kts <<'EOF'
+          plugins { id("com.android.application") }
+          android { namespace = "test.warm"; compileSdk = 35; defaultConfig { applicationId = "test.warm"; minSdk = 21; targetSdk = 28; versionCode = 1; versionName = "1" } }
+          dependencies { implementation("androidx.media3:media3-exoplayer:1.7.1"); implementation("androidx.media3:media3-exoplayer-hls:1.7.1") }
+          EOF
+          cat > /tmp/warm/app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@android:style/Theme.Material.Light.NoActionBar" /></manifest>
+          EOF
+          cat > /tmp/warm/app/src/main/java/test/warm/Dummy.java <<'EOF'
+          package test.warm; public final class Dummy { public static final String X = "warm"; }
+          EOF
+          cd /tmp/warm
+          gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Package build environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/piiwii-build-env/sdk/build-tools /tmp/piiwii-build-env/sdk/platforms /tmp/piiwii-build-env/gradle
+          cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" /tmp/piiwii-build-env/sdk/build-tools/
+          cp -a "$ANDROID_SDK_ROOT/platforms/android-35" /tmp/piiwii-build-env/sdk/platforms/
+          curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/piiwii-build-env/gradle/gradle-8.9-bin.zip
+          cp -a "$HOME/.gradle/caches/modules-2" /tmp/piiwii-build-env/gradle/
+          cp -a "$HOME/.gradle/caches/8.9" /tmp/piiwii-build-env/gradle/ || true
+          find /tmp/piiwii-build-env -type f | sort > /tmp/piiwii-build-env/CONTENTS.txt
+          du -sh /tmp/piiwii-build-env
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piiwii-tv-android-build-env
+          path: /tmp/piiwii-build-env/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
