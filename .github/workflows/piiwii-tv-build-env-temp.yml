@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/warm/app/src/main/java/test/warm
+          printf 'android.useAndroidX=true\n' > /tmp/warm/gradle.properties
           cat > /tmp/warm/settings.gradle.kts <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -62,8 +63,7 @@ jobs:
           cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" /tmp/piiwii-build-env/sdk/build-tools/
           cp -a "$ANDROID_SDK_ROOT/platforms/android-35" /tmp/piiwii-build-env/sdk/platforms/
           curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/piiwii-build-env/gradle/gradle-8.9-bin.zip
-          cp -a "$HOME/.gradle/caches/modules-2" /tmp/piiwii-build-env/gradle/
-          cp -a "$HOME/.gradle/caches/8.9" /tmp/piiwii-build-env/gradle/ || true
+          cp -a "$HOME/.gradle/caches" /tmp/piiwii-build-env/gradle/
           find /tmp/piiwii-build-env -type f | sort > /tmp/piiwii-build-env/CONTENTS.txt
           du -sh /tmp/piiwii-build-env
       - uses: actions/upload-artifact@v4
