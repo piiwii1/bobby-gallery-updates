@@ -27,13 +27,37 @@ jobs:
           dotnet publish .\PiiWiiTV.csproj -c Release -r win-x64 --self-contained true -o .\publish /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
           Pop-Location
           if (!(Test-Path (Join-Path $dir 'publish\PiiWiiTV.exe'))) { throw 'PiiWiiTV.exe non généré' }
-          $hash=(Get-FileHash (Join-Path $dir 'publish\PiiWiiTV.exe') -Algorithm SHA256).Hash.ToLower()
-          "$hash  PiiWiiTV.exe" | Set-Content (Join-Path $dir 'publish\SHA256.txt') -Encoding ascii
-      - name: Upload EXE
+      - name: Download WebView2 bootstrapper
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE '_build/piiwii-tv-windows-1.0.1'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile (Join-Path $dir 'MicrosoftEdgeWebview2Setup.exe') -UseBasicParsing
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE '_build/piiwii-tv-windows-1.0.1'
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { throw 'ISCC introuvable' }
+          & $iscc (Join-Path $dir 'installer.iss')
+          if ($LASTEXITCODE -ne 0) { throw 'Compilation Inno Setup échouée' }
+          if (!(Test-Path (Join-Path $dir 'output\PiiWii-TV-Setup-1.0.1.exe'))) { throw 'Installateur non généré' }
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE '_build/piiwii-tv-windows-1.0.1'
+          $out = Join-Path $dir 'delivery'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          Copy-Item (Join-Path $dir 'output\PiiWii-TV-Setup-1.0.1.exe') $out
+          Copy-Item (Join-Path $dir 'publish\PiiWiiTV.exe') (Join-Path $out 'PiiWii-TV-1.0.1-PORTABLE.exe')
+          $lines = Get-ChildItem $out -File | ForEach-Object { "$( (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower() )  $($_.Name)" }
+          $lines | Set-Content (Join-Path $out 'SHA256.txt') -Encoding ascii
+          Get-Content (Join-Path $out 'SHA256.txt')
+      - name: Upload delivery
         uses: actions/upload-artifact@v4
         with:
-          name: PiiWii-TV-Windows-1.0.1-EXE
-          path: |
-            _build/piiwii-tv-windows-1.0.1/publish/PiiWiiTV.exe
-            _build/piiwii-tv-windows-1.0.1/publish/SHA256.txt
+          name: PiiWii-TV-Windows-1.0.1-FINAL
+          path: _build/piiwii-tv-windows-1.0.1/delivery/*
           if-no-files-found: error
