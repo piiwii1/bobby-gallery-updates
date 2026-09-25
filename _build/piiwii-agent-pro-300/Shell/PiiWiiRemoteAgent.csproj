@@ -9,7 +9,6 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <ApplicationIcon>PiiWii-Remote-Agent.ico</ApplicationIcon>
     <AssemblyName>PiiWii Remote Agent</AssemblyName>
     <RootNamespace>PiiWii.Remote.Agent</RootNamespace>
     <Version>3.0.0</Version>
