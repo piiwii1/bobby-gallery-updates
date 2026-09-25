@@ -1,0 +1,70 @@
+name: PiiWii Remote Clean 2.3.0
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/piiwii-remote-clean-230.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Decode audited source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf work && mkdir -p work/app
+          python3 - <<'PY'
+          import base64,re,pathlib
+          p=pathlib.Path('_build/piiwii-remote-phone-2.1.0/source.zip.b64')
+          s=p.read_text(errors='ignore')
+          s=''.join(re.findall(r'[A-Za-z0-9+/=]',s))
+          pathlib.Path('work/source.zip').write_bytes(base64.b64decode(s))
+          PY
+          unzip -q work/source.zip -d work/app
+          test -f work/app/remote/build.gradle.kts
+      - name: Make clean local-only phone build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('work/app/remote/build.gradle.kts')
+          s=p.read_text()
+          s=s.replace('applicationId = "ch.piiwii.remote2"','applicationId = "ch.piiwii.remote2.clean"')
+          s=re.sub(r'versionCode\s*=\s*\d+','versionCode = 230',s)
+          s=re.sub(r'versionName\s*=\s*"[^"]+"','versionName = "2.3.0-clean1"',s)
+          p.write_text(s)
+          q=Path('work/app/remote/src/main/java/ch/piiwii/remote2/ui/PiiWiiTvRemoteClient.kt')
+          t=q.read_text()
+          t=re.sub(r'fun pair\(site: String, code: String, deviceName: String, callback: \(Boolean, String\) -> Unit\) \{.*?\n    \}', 'fun pair(site: String, code: String, deviceName: String, callback: (Boolean, String) -> Unit) {\n        callback(false, "Appairage Internet désactivé : utilise le PiiWii Remote Agent local.")\n    }', t, flags=re.S)
+          t=re.sub(r'fun send\(action: String, callback: \(Boolean, String\) -> Unit\) \{.*?\n    \}', 'fun send(action: String, callback: (Boolean, String) -> Unit) {\n        callback(false, "Commande Internet désactivée : utilise le PiiWii Remote Agent local.")\n    }', t, flags=re.S)
+          q.write_text(t)
+          PY
+          grep -n 'applicationId\|versionCode\|versionName' work/app/remote/build.gradle.kts
+          ! grep -R "code expiré ou invalide" -n work/app/remote/src/main/java
+      - name: Build signed debug APK
+        working-directory: work/app
+        run: gradle :remote:assembleDebug --no-daemon
+      - name: Prepare delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          APK=$(find work/app/remote/build/outputs/apk/debug -name '*.apk' | head -1)
+          cp "$APK" delivery/PiiWii-Remote-Phone-2.3.0-clean1.apk
+          sha256sum delivery/PiiWii-Remote-Phone-2.3.0-clean1.apk > delivery/SHA256.txt
+          printf '%s\n' 'PiiWii Remote 2.3.0-clean1' 'Package: ch.piiwii.remote2.clean' 'Fresh app data; installs alongside existing app.' 'PC pairing: local IP + UDP 45821 + Agent PIN only.' 'Old WordPress pairing route disabled.' > delivery/README.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Remote-Phone-2.3.0-clean1
+          path: delivery/*
+          if-no-files-found: error
