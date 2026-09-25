@@ -1,0 +1,27 @@
+name: PiiWii Remote beta37 export public base
+on:
+  push:
+    branches:
+      - piiwii-remote-beta37-exportbase
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout historical remote repository
+        uses: actions/checkout@v4
+        with:
+          repository: piiwii1/wlm-escargot-android-updates
+          ref: piiwii-remote-beta25-channel-grid
+          path: hist
+      - name: Archive relevant source
+        shell: bash
+        run: |
+          cd hist
+          tar -czf /tmp/base.tar.gz piiwii-remote-beta21 piiwii-remote-point1-src piiwii-remote-phone-beta16-fastremote 2>/dev/null || true
+          if [ ! -s /tmp/base.tar.gz ]; then tar -czf /tmp/base.tar.gz .; fi
+          ls -lh /tmp/base.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piiwii-remote-public-base
+          path: /tmp/base.tar.gz
+          if-no-files-found: error
