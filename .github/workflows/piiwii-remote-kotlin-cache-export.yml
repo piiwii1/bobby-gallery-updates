@@ -10,7 +10,6 @@ jobs:
   export:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -18,16 +17,63 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Resolve PiiWii Remote Android dependencies
-        working-directory: piiwii-remote-clean230
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Create exact beta37 dependency project
+        run: |
+          mkdir -p /tmp/piiwii-remote-deps/remote/src/main/java/ch/piiwii/remote2
+          cat > /tmp/piiwii-remote-deps/settings.gradle.kts <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = "PiiWiiRemoteDeps"
+          include(":remote")
+          EOF
+          cat > /tmp/piiwii-remote-deps/build.gradle.kts <<'EOF'
+          plugins {
+              id("com.android.application") version "8.7.3" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+          }
+          EOF
+          cat > /tmp/piiwii-remote-deps/remote/build.gradle.kts <<'EOF'
+          plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
+          android {
+              namespace = "ch.piiwii.remote2"
+              compileSdk = 35
+              defaultConfig { applicationId = "ch.piiwii.remote2"; minSdk = 26; targetSdk = 35; versionCode = 67; versionName = "2.0.0-beta37" }
+              compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.activity:activity-ktx:1.10.1")
+              implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+              implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+              implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+              implementation("io.coil-kt:coil:2.7.0")
+              implementation("io.coil-kt:coil-svg:2.7.0")
+              testImplementation("junit:junit:4.13.2")
+          }
+          EOF
+          cat > /tmp/piiwii-remote-deps/remote/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          EOF
+          mkdir -p /tmp/piiwii-remote-deps/remote/src/main/res/values
+          cat > /tmp/piiwii-remote-deps/remote/src/main/res/values/styles.xml <<'EOF'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"/></resources>
+          EOF
+          cat > /tmp/piiwii-remote-deps/remote/src/main/java/ch/piiwii/remote2/MainActivity.kt <<'EOF'
+          package ch.piiwii.remote2
+          import android.app.Activity
+          class MainActivity : Activity()
+          EOF
+      - name: Resolve exact PiiWii Remote dependencies
+        working-directory: /tmp/piiwii-remote-deps
+        run: gradle :remote:assembleDebug --stacktrace
       - name: Pack Gradle dependency cache
         run: |
           mkdir -p out
-          tar -czf out/piiwii-remote-gradle-cache.tgz -C "$HOME/.gradle/caches" modules-2
-          sha256sum out/piiwii-remote-gradle-cache.tgz > out/SHA256.txt
+          tar -czf out/piiwii-remote-beta37-gradle-cache.tgz -C "$HOME/.gradle/caches" modules-2
+          sha256sum out/piiwii-remote-beta37-gradle-cache.tgz > out/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: piiwii-remote-gradle-cache
+          name: piiwii-remote-beta37-gradle-cache
           path: out/*
           retention-days: 1
