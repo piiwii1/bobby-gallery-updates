@@ -19,7 +19,11 @@ jobs:
           gradle-version: '8.10.2'
       - name: Create exact beta37 dependency project
         run: |
-          mkdir -p /tmp/piiwii-remote-deps/remote/src/main/java/ch/piiwii/remote2
+          mkdir -p /tmp/piiwii-remote-deps/remote/src/main/java/ch/piiwii/remote2 /tmp/piiwii-remote-deps/remote/src/main/res/values
+          cat > /tmp/piiwii-remote-deps/gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
           cat > /tmp/piiwii-remote-deps/settings.gradle.kts <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -55,7 +59,6 @@ jobs:
           cat > /tmp/piiwii-remote-deps/remote/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
           EOF
-          mkdir -p /tmp/piiwii-remote-deps/remote/src/main/res/values
           cat > /tmp/piiwii-remote-deps/remote/src/main/res/values/styles.xml <<'EOF'
           <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"/></resources>
           EOF
