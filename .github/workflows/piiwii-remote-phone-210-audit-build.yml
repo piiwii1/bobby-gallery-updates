@@ -1,0 +1,61 @@
+name: PiiWii Remote Phone 2.1.0 audited build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '_build/piiwii-remote-phone-2.1.0/**'
+      - '.github/workflows/piiwii-remote-phone-210-audit-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Decode audited source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          base64 -d _build/piiwii-remote-phone-2.1.0/source.zip.b64 > work/source.zip
+          unzip -q work/source.zip -d work/app
+          test -f work/app/remote/build.gradle.kts
+
+      - name: Build Android APK
+        shell: bash
+        working-directory: work/app
+        run: |
+          set -euo pipefail
+          gradle :remote:assembleDebug --stacktrace
+          test -f remote/build/outputs/apk/debug/remote-debug.apk
+
+      - name: Prepare delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p delivery
+          cp work/app/remote/build/outputs/apk/debug/remote-debug.apk delivery/PiiWii-Remote-2.1.0.apk
+          cp work/source.zip delivery/PiiWii-Remote-Phone-2.1.0-SOURCES.zip
+          sha256sum delivery/* > delivery/SHA256.txt
+          cat delivery/SHA256.txt
+
+      - name: Upload delivery
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Remote-Phone-2.1.0-AUDITED
+          path: delivery/*
+          if-no-files-found: error
+          retention-days: 30
