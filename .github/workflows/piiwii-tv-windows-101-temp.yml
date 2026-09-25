@@ -1,0 +1,39 @@
+name: PiiWii TV Windows 1.0.1 Temp Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '_build/piiwii-tv-windows-1.0.1/**'
+      - '.github/workflows/piiwii-tv-windows-101-temp.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Decode icon and publish
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:GITHUB_WORKSPACE '_build/piiwii-tv-windows-1.0.1'
+          $b64 = (Get-Content (Join-Path $dir 'PiiWiiTV.ico.b64') -Raw).Trim()
+          [IO.File]::WriteAllBytes((Join-Path $dir 'PiiWiiTV.ico'), [Convert]::FromBase64String($b64))
+          Push-Location $dir
+          dotnet restore .\PiiWiiTV.csproj
+          dotnet publish .\PiiWiiTV.csproj -c Release -r win-x64 --self-contained true -o .\publish /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+          Pop-Location
+          if (!(Test-Path (Join-Path $dir 'publish\PiiWiiTV.exe'))) { throw 'PiiWiiTV.exe non généré' }
+          $hash=(Get-FileHash (Join-Path $dir 'publish\PiiWiiTV.exe') -Algorithm SHA256).Hash.ToLower()
+          "$hash  PiiWiiTV.exe" | Set-Content (Join-Path $dir 'publish\SHA256.txt') -Encoding ascii
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-TV-Windows-1.0.1-EXE
+          path: |
+            _build/piiwii-tv-windows-1.0.1/publish/PiiWiiTV.exe
+            _build/piiwii-tv-windows-1.0.1/publish/SHA256.txt
+          if-no-files-found: error
