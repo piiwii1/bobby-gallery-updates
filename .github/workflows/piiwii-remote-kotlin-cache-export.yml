@@ -1,0 +1,33 @@
+name: PiiWii Remote Kotlin cache export
+on:
+  push:
+    paths:
+      - '.github/workflows/piiwii-remote-kotlin-cache-export.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Resolve PiiWii Remote Android dependencies
+        working-directory: piiwii-remote-clean230
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Pack Gradle dependency cache
+        run: |
+          mkdir -p out
+          tar -czf out/piiwii-remote-gradle-cache.tgz -C "$HOME/.gradle/caches" modules-2
+          sha256sum out/piiwii-remote-gradle-cache.tgz > out/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piiwii-remote-gradle-cache
+          path: out/*
+          retention-days: 1
