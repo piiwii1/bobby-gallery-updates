@@ -65,27 +65,41 @@ jobs:
           package ch.piiwii.euroscan; public class MainActivity extends android.app.Activity {}
           EOF
           gradle -p "$P" --no-daemon assembleRelease
-      - name: Pack compact toolchain
+      - name: Pack separate toolchain parts
         shell: bash
         run: |
           set -euo pipefail
-          O=/tmp/euroscan-toolchain; rm -rf "$O"
-          mkdir -p "$O/android-sdk/build-tools" "$O/android-sdk/platforms" "$O/gradle-user-home/caches"
+          rm -rf /tmp/euroscan-parts && mkdir -p /tmp/euroscan-parts/sdk/android-sdk/build-tools /tmp/euroscan-parts/sdk/android-sdk/platforms /tmp/euroscan-parts/sdk/android-sdk
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" /tmp/euroscan-parts/sdk/android-sdk/build-tools/
+          cp -a "$ANDROID_HOME/platforms/android-35" /tmp/euroscan-parts/sdk/android-sdk/platforms/
+          cp -a "$ANDROID_HOME/platform-tools" /tmp/euroscan-parts/sdk/android-sdk/
+          tar -C /tmp/euroscan-parts/sdk -czf /tmp/euroscan-sdk35.tar.gz android-sdk
+
           GB="$(readlink -f "$(command -v gradle)")"; GH="$(dirname "$(dirname "$GB")")"
-          cp -a "$GH" "$O/gradle-8.9"
-          cp -a "$ANDROID_HOME/build-tools/35.0.0" "$O/android-sdk/build-tools/"
-          cp -a "$ANDROID_HOME/platforms/android-35" "$O/android-sdk/platforms/"
-          cp -a "$ANDROID_HOME/platform-tools" "$O/android-sdk/"
-          for d in modules-2 8.9 jars-9 transforms-4 journal-1; do [ ! -e "$HOME/.gradle/caches/$d" ] || cp -a "$HOME/.gradle/caches/$d" "$O/gradle-user-home/caches/"; done
-          [ ! -d "$HOME/.gradle/native" ] || cp -a "$HOME/.gradle/native" "$O/gradle-user-home/"
-          find "$O" -name '*.lock' -delete || true
-          tar -C /tmp -czf /tmp/euroscan-offline-toolchain.tar.gz euroscan-toolchain
-          sha256sum /tmp/euroscan-offline-toolchain.tar.gz > /tmp/euroscan-offline-toolchain-SHA256.txt
-          du -h /tmp/euroscan-offline-toolchain.tar.gz
+          tar -C "$(dirname "$GH")" -czf /tmp/euroscan-gradle89.tar.gz "$(basename "$GH")"
+
+          find "$HOME/.gradle/caches/modules-2" -name '*.lock' -delete || true
+          tar -C "$HOME/.gradle/caches" -czf /tmp/euroscan-gradle-modules2.tar.gz modules-2
+
+          sha256sum /tmp/euroscan-sdk35.tar.gz /tmp/euroscan-gradle89.tar.gz /tmp/euroscan-gradle-modules2.tar.gz > /tmp/SHA256SUMS.txt
+          ls -lh /tmp/euroscan-*.tar.gz /tmp/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: euroscan-offline-toolchain
+          name: euroscan-sdk35
           path: |
-            /tmp/euroscan-offline-toolchain.tar.gz
-            /tmp/euroscan-offline-toolchain-SHA256.txt
+            /tmp/euroscan-sdk35.tar.gz
+            /tmp/SHA256SUMS.txt
           retention-days: 1
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: euroscan-gradle89
+          path: /tmp/euroscan-gradle89.tar.gz
+          retention-days: 1
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: euroscan-gradle-modules2
+          path: /tmp/euroscan-gradle-modules2.tar.gz
+          retention-days: 1
+          compression-level: 0
