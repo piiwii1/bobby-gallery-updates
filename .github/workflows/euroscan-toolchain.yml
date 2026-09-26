@@ -1,0 +1,91 @@
+name: EuroScan Offline Toolchain Export
+on:
+  push:
+    branches: [chatgpt-euroscan-toolchain-20260926]
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: '8.9'}
+      - name: Warm EuroScan dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=/tmp/warm
+          rm -rf "$P"; mkdir -p "$P/app/src/main/java/ch/piiwii/euroscan" "$P/app/src/main/res/values"
+          cat > "$P/settings.gradle" <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='Warm'; include ':app'
+          EOF
+          cat > "$P/build.gradle" <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > "$P/gradle.properties" <<'EOF'
+          android.useAndroidX=true
+          org.gradle.jvmargs=-Xmx3g
+          EOF
+          cat > "$P/app/build.gradle" <<'EOF'
+          plugins { id 'com.android.application' }
+          android { namespace 'ch.piiwii.euroscan'; compileSdk 35; defaultConfig { applicationId 'ch.piiwii.euroscan.warm'; minSdk 26; targetSdk 35; versionCode 1; versionName '1' } }
+          dependencies {
+            implementation 'androidx.activity:activity:1.10.0'
+            implementation 'androidx.core:core:1.15.0'
+            implementation 'androidx.camera:camera-core:1.4.2'
+            implementation 'androidx.camera:camera-camera2:1.4.2'
+            implementation 'androidx.camera:camera-lifecycle:1.4.2'
+            implementation 'androidx.camera:camera-view:1.4.2'
+            implementation 'com.google.mlkit:text-recognition:16.0.1'
+            implementation 'org.jsoup:jsoup:1.18.3'
+          }
+          EOF
+          cat > "$P/app/src/main/AndroidManifest.xml" <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:theme="@style/AppTheme"><activity android:name=".MainActivity" android:exported="true"/></application></manifest>
+          EOF
+          cat > "$P/app/src/main/res/values/styles.xml" <<'EOF'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"/></resources>
+          EOF
+          cat > "$P/app/src/main/java/ch/piiwii/euroscan/MainActivity.java" <<'EOF'
+          package ch.piiwii.euroscan; public class MainActivity extends android.app.Activity {}
+          EOF
+          gradle -p "$P" --no-daemon assembleRelease
+      - name: Pack compact toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          O=/tmp/euroscan-toolchain; rm -rf "$O"
+          mkdir -p "$O/android-sdk/build-tools" "$O/android-sdk/platforms" "$O/gradle-user-home/caches"
+          GB="$(readlink -f "$(command -v gradle)")"; GH="$(dirname "$(dirname "$GB")")"
+          cp -a "$GH" "$O/gradle-8.9"
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" "$O/android-sdk/build-tools/"
+          cp -a "$ANDROID_HOME/platforms/android-35" "$O/android-sdk/platforms/"
+          cp -a "$ANDROID_HOME/platform-tools" "$O/android-sdk/"
+          for d in modules-2 8.9 jars-9 transforms-4 journal-1; do [ ! -e "$HOME/.gradle/caches/$d" ] || cp -a "$HOME/.gradle/caches/$d" "$O/gradle-user-home/caches/"; done
+          [ ! -d "$HOME/.gradle/native" ] || cp -a "$HOME/.gradle/native" "$O/gradle-user-home/"
+          find "$O" -name '*.lock' -delete || true
+          tar -C /tmp -czf /tmp/euroscan-offline-toolchain.tar.gz euroscan-toolchain
+          sha256sum /tmp/euroscan-offline-toolchain.tar.gz > /tmp/euroscan-offline-toolchain-SHA256.txt
+          du -h /tmp/euroscan-offline-toolchain.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: euroscan-offline-toolchain
+          path: |
+            /tmp/euroscan-offline-toolchain.tar.gz
+            /tmp/euroscan-offline-toolchain-SHA256.txt
+          retention-days: 1
