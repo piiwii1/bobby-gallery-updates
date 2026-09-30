@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -42,24 +42,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p out _visited_preview
+          mkdir -p out
           APK="_piiwii_visited_build/app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK"
           cp "$APK" out/Visited-1.0.0-beta12-PREVIEW.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/Visited-1.0.0-beta12-PREVIEW.apk
           sha256sum out/Visited-1.0.0-beta12-PREVIEW.apk > out/Visited-1.0.0-beta12-PREVIEW.sha256
-          cp out/Visited-1.0.0-beta12-PREVIEW.apk _visited_preview/
-          cp out/Visited-1.0.0-beta12-PREVIEW.sha256 _visited_preview/
-          git config user.name "ChatGPT Build"
-          git config user.email "actions@users.noreply.github.com"
-          git add _visited_preview
-          if git diff --cached --quiet; then
-            echo "Preview already published"
-          else
-            git commit -m "Publish Visited beta12 preview APK"
-            git pull --rebase origin main
-            git push origin main
-          fi
       - uses: actions/upload-artifact@v4
         with:
           name: Visited-1.0.0-beta12-PREVIEW
