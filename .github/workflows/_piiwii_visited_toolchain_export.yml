@@ -1,0 +1,52 @@
+name: PiiWii Visited Android Toolchain Export
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/_piiwii_visited_toolchain_export.yml'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK parts
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - name: Prepare portable toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/android-sdk/platforms out/android-sdk/build-tools out/android-sdk/platform-tools out/android-sdk/licenses
+          cp -a "$ANDROID_HOME/platforms/android-35" out/android-sdk/platforms/
+          cp -a "$ANDROID_HOME/build-tools/35.0.0" out/android-sdk/build-tools/
+          cp -a "$ANDROID_HOME/platform-tools/." out/android-sdk/platform-tools/
+          cp -a "$ANDROID_HOME/licenses/." out/android-sdk/licenses/ 2>/dev/null || true
+          curl -L --fail --retry 3 -o out/gradle-8.9-bin.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          java -version
+          du -sh out/android-sdk out/gradle-8.9-bin.zip
+      - name: Upload portable toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: piwii-android-toolchain-api35-gradle89
+          path: out/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
