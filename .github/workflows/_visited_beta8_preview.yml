@@ -1,4 +1,4 @@
-name: Visited beta8 preview
+name: Visited beta9 preview
 
 on:
   push:
@@ -45,23 +45,23 @@ jobs:
           mkdir -p out _visited_preview
           APK="_piiwii_visited_build/app/build/outputs/apk/debug/app-debug.apk"
           test -f "$APK"
-          cp "$APK" out/Visited-1.0.0-beta8-PREVIEW.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/Visited-1.0.0-beta8-PREVIEW.apk
-          sha256sum out/Visited-1.0.0-beta8-PREVIEW.apk > out/Visited-1.0.0-beta8-PREVIEW.sha256
-          cp out/Visited-1.0.0-beta8-PREVIEW.apk _visited_preview/
-          cp out/Visited-1.0.0-beta8-PREVIEW.sha256 _visited_preview/
+          cp "$APK" out/Visited-1.0.0-beta9-PREVIEW.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/Visited-1.0.0-beta9-PREVIEW.apk
+          sha256sum out/Visited-1.0.0-beta9-PREVIEW.apk > out/Visited-1.0.0-beta9-PREVIEW.sha256
+          cp out/Visited-1.0.0-beta9-PREVIEW.apk _visited_preview/
+          cp out/Visited-1.0.0-beta9-PREVIEW.sha256 _visited_preview/
           git config user.name "ChatGPT Build"
           git config user.email "actions@users.noreply.github.com"
           git add _visited_preview
           if git diff --cached --quiet; then
             echo "Preview already published"
           else
-            git commit -m "Publish Visited beta8 preview APK"
+            git commit -m "Publish Visited beta9 preview APK"
             git push
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: Visited-1.0.0-beta8-PREVIEW
+          name: Visited-1.0.0-beta9-PREVIEW
           path: out/
           retention-days: 7
           if-no-files-found: error
