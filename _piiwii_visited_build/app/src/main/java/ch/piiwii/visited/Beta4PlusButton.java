@@ -7,6 +7,7 @@ import android.util.AttributeSet;
 import android.widget.Button;
 import android.widget.Toast;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 public class Beta4PlusButton extends Button {
@@ -30,9 +31,42 @@ public class Beta4PlusButton extends Button {
                 new String[]{"Recentrer la carte sur ma position", "Enregistrer un nouvel endroit visité"},
                 which -> {
                     if (which == 0) invokeMain("locateMe");
-                    else if (which == 1) invokeMain("showAddMenu");
+                    else showAddChoices();
                 }
         );
+    }
+
+    private void showAddChoices() {
+        VisitedActionSheet.show(
+                getContext(),
+                "Ajouter un lieu",
+                "Choisis la façon la plus simple",
+                new String[]{"◎", "⌕", "⌖"},
+                new String[]{"Ma position actuelle", "Rechercher un lieu", "Placer sur la carte"},
+                new String[]{
+                        "Utiliser le GPS du téléphone",
+                        "Chercher une ville, une adresse ou un endroit",
+                        "Toucher directement l'endroit sur la carte"
+                },
+                which -> {
+                    if (which == 0) invokeMain("locateAndPropose");
+                    else if (which == 1) invokeMain("searchAddressDialog");
+                    else enablePlacementMode();
+                }
+        );
+    }
+
+    private void enablePlacementMode() {
+        Activity activity = unwrapActivity(getContext());
+        if (activity == null) return;
+        try {
+            Field f = activity.getClass().getDeclaredField("placementMode");
+            f.setAccessible(true);
+            f.setBoolean(activity, true);
+            Toast.makeText(getContext(), "Touchez l'endroit à ajouter sur la carte", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(getContext(), "Action indisponible", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void invokeMain(String methodName) {
