@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ch.piiwii.visited'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'ch.piiwii.visited'
+        minSdk 23
+        targetSdk 35
+        versionCode 1
+        versionName '1.0.0-beta1'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+    }
+}
+
+dependencies {
+    implementation 'org.osmdroid:osmdroid-android:6.1.20'
+}
