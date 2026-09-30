@@ -1,0 +1,14 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:background="@drawable/nav_bg"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:paddingLeft="4dp"
+    android:paddingRight="4dp">
+
+    <Button android:id="@+id/bottomHome" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:padding="0dp" android:text="⌂\nHOME" android:textAllCaps="false" android:textColor="@color/text_dim" android:textSize="12sp" />
+    <Button android:id="@+id/bottomMap" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:padding="0dp" android:text="◎\nCARTE" android:textAllCaps="false" android:textColor="@color/text_dim" android:textSize="12sp" />
+    <Button android:id="@+id/bottomPlaces" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:padding="0dp" android:text="≡\nLIEUX" android:textAllCaps="false" android:textColor="@color/text_dim" android:textSize="12sp" />
+    <Button android:id="@+id/bottomProfile" style="?android:attr/borderlessButtonStyle" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:gravity="center" android:padding="0dp" android:text="●\nPROFIL" android:textAllCaps="false" android:textColor="@color/text_dim" android:textSize="12sp" />
+</LinearLayout>
