@@ -10,8 +10,8 @@ android {
         applicationId 'ch.piiwii.visited'
         minSdk 23
         targetSdk 35
-        versionCode 9
-        versionName '1.0.0-beta9'
+        versionCode 10
+        versionName '1.0.0-beta10'
     }
 
     buildTypes {
@@ -21,7 +21,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            applicationIdSuffix '.beta9test'
+            applicationIdSuffix '.beta10test'
             versionNameSuffix '-installfix'
         }
     }
