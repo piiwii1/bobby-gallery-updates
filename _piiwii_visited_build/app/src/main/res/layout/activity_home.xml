@@ -1,0 +1,45 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginBottom="72dp"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PiiWii Visited" android:textColor="@color/text" android:textSize="29sp" android:textStyle="bold" />
+            <TextView android:id="@+id/homeSubtitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Ta carte de lieux visités" android:textColor="@color/text_dim" android:textSize="15sp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:orientation="horizontal">
+                <LinearLayout android:layout_width="0dp" android:layout_height="112dp" android:layout_weight="1" android:background="@drawable/card_bg" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/statTotal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/text" android:textSize="32sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="LIEUX" android:textColor="@color/text_dim" android:textSize="11sp" />
+                </LinearLayout>
+                <Space android:layout_width="10dp" android:layout_height="1dp" />
+                <LinearLayout android:layout_width="0dp" android:layout_height="112dp" android:layout_weight="1" android:background="@drawable/card_bg" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/statMyMaps" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/accent" android:textSize="32sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MY MAPS" android:textColor="@color/text_dim" android:textSize="11sp" />
+                </LinearLayout>
+                <Space android:layout_width="10dp" android:layout_height="1dp" />
+                <LinearLayout android:layout_width="0dp" android:layout_height="112dp" android:layout_weight="1" android:background="@drawable/card_bg" android:gravity="center" android:orientation="vertical">
+                    <TextView android:id="@+id/statLocal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" android:textColor="@color/accent2" android:textSize="32sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AJOUTS" android:textColor="@color/text_dim" android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Répartition" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" />
+            <ch.piiwii.visited.StatsChartView android:id="@+id/statsChart" android:layout_width="match_parent" android:layout_height="220dp" android:layout_marginTop="10dp" android:background="@drawable/card_bg" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:background="@drawable/card_bg" android:padding="18dp" android:text="Ta carte se remplit au fur et à mesure de tes visites. Les points My Maps et les ajouts faits directement dans l'application restent distingués dans les statistiques." android:textColor="@color/text_dim" android:textSize="14sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <ch.piiwii.visited.BottomNavBar android:layout_width="match_parent" android:layout_height="72dp" android:layout_gravity="bottom" />
+</FrameLayout>
