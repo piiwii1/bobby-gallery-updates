@@ -57,7 +57,8 @@ jobs:
             echo "Preview already published"
           else
             git commit -m "Publish Visited beta12 preview APK"
-            git push
+            git pull --rebase origin main
+            git push origin main
           fi
       - uses: actions/upload-artifact@v4
         with:
