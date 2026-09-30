@@ -16,113 +16,242 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingLeft="18dp"
-            android:paddingTop="10dp"
+            android:paddingTop="16dp"
             android:paddingRight="18dp"
             android:paddingBottom="32dp">
 
-            <ImageView
-                android:id="@+id/homeAppIcon"
-                android:layout_width="178dp"
-                android:layout_height="178dp"
-                android:layout_gravity="center_horizontal"
-                android:adjustViewBounds="true"
-                android:contentDescription="Visited"
-                android:scaleType="fitCenter"
-                android:src="@drawable/piiwii_visited_icon" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="-4dp"
-                android:gravity="center"
-                android:letterSpacing="0.14"
-                android:text="MA CARTE PERSONNELLE"
-                android:textColor="@color/accent"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:gravity="center"
-                android:text="Visited"
-                android:textColor="@color/text"
-                android:textSize="32sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/homeSubtitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:gravity="center"
-                android:text="Mes lieux, mes voyages, ma carte"
-                android:textColor="@color/text_dim"
-                android:textSize="14sp" />
-
+            <!-- Brand header: compact so the useful information is visible immediately -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/homeAppIcon"
+                    android:layout_width="88dp"
+                    android:layout_height="88dp"
+                    android:adjustViewBounds="true"
+                    android:contentDescription="Visited"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/piiwii_visited_icon" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:letterSpacing="0.12"
+                        android:text="MA CARTE PERSONNELLE"
+                        android:textColor="@color/accent"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Visited"
+                        android:textColor="@color/text"
+                        android:textSize="30sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/homeSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Mes lieux, mes voyages, ma carte"
+                        android:textColor="@color/text_dim"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Main hero -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
                 android:background="@drawable/home_hero_bg"
-                android:elevation="5dp"
+                android:elevation="6dp"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.08"
+                    android:text="MES LIEUX VISITÉS"
+                    android:textColor="#F0AAAC"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:gravity="bottom"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/statTotal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textColor="#FFFFFF"
+                        android:textSize="52sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="9dp"
+                        android:layout_marginBottom="9dp"
+                        android:text="lieux"
+                        android:textColor="#D9DBE1"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Tous les endroits enregistrés sur ta carte, au même endroit."
+                    android:textColor="#C9CDD5"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/homeOpenMap"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/home_action_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="Explorer ma carte  ›"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="En un coup d’œil"
+                android:textColor="@color/text"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <!-- Countries / cities -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="116dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/dashboard_card_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PAYS" android:textColor="#F0AAAC" android:textSize="11sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/statCountries" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="—" android:textColor="#FFFFFF" android:textSize="35sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="pays différents" android:textColor="#8F95A0" android:textSize="12sp" />
+                </LinearLayout>
+
+                <Space android:layout_width="10dp" android:layout_height="1dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="116dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/dashboard_card_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VILLES" android:textColor="#9FC7F1" android:textSize="11sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/statCities" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="—" android:textColor="#FFFFFF" android:textSize="35sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="villes identifiées" android:textColor="#8F95A0" android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- My Maps / local -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="96dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/dashboard_card_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MY MAPS" android:textColor="@color/accent" android:textSize="11sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/statMyMaps" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0" android:textColor="#FFFFFF" android:textSize="29sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="importés" android:textColor="#8F95A0" android:textSize="12sp" />
+                </LinearLayout>
+
+                <Space android:layout_width="10dp" android:layout_height="1dp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="96dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/dashboard_card_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AJOUTS APP" android:textColor="@color/accent2" android:textSize="11sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/statLocal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0" android:textColor="#FFFFFF" android:textSize="29sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ajoutés ici" android:textColor="#8F95A0" android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Geographic analysis -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/dashboard_card_bg"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingLeft="20dp"
-                android:paddingTop="18dp"
-                android:paddingRight="20dp"
-                android:paddingBottom="18dp">
+                android:padding="14dp">
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:orientation="vertical">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:letterSpacing="0.08" android:text="LIEUX VISITÉS" android:textColor="#E8A4A6" android:textSize="11sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/statTotal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="1dp" android:text="0" android:textColor="#FFFFFF" android:textSize="46sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="points enregistrés sur ta carte" android:textColor="#D9DBE1" android:textSize="13sp" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ANALYSE GÉOGRAPHIQUE" android:textColor="#AEB3BD" android:textSize="10sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/geoStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Analyse géographique…" android:textColor="#E4E6EA" android:textSize="12sp" />
                 </LinearLayout>
 
                 <TextView
+                    android:id="@+id/geoPercent"
                     android:layout_width="58dp"
-                    android:layout_height="58dp"
-                    android:background="@drawable/settings_button_bg"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/home_percent_bg"
                     android:gravity="center"
-                    android:text="⌖"
+                    android:text="0%"
                     android:textColor="#FFFFFF"
-                    android:textSize="29sp" />
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
             </LinearLayout>
-
-            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Ton voyage en chiffres" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" />
-
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
-                <LinearLayout android:layout_width="0dp" android:layout_height="112dp" android:layout_weight="1" android:background="@drawable/dashboard_card_bg" android:gravity="center_vertical" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PAYS" android:textColor="#E8A4A6" android:textSize="11sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/statCountries" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="—" android:textColor="#FFFFFF" android:textSize="33sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="différents" android:textColor="#8F95A0" android:textSize="12sp" />
-                </LinearLayout>
-                <Space android:layout_width="10dp" android:layout_height="1dp" />
-                <LinearLayout android:layout_width="0dp" android:layout_height="112dp" android:layout_weight="1" android:background="@drawable/dashboard_card_bg" android:gravity="center_vertical" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VILLES" android:textColor="#9FC7F1" android:textSize="11sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/statCities" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="—" android:textColor="#FFFFFF" android:textSize="33sp" android:textStyle="bold" />
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="identifiées" android:textColor="#8F95A0" android:textSize="12sp" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="horizontal">
-                <LinearLayout android:layout_width="0dp" android:layout_height="92dp" android:layout_weight="1" android:background="@drawable/dashboard_card_bg" android:gravity="center_vertical" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MY MAPS" android:textColor="@color/accent" android:textSize="11sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/statMyMaps" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold" />
-                </LinearLayout>
-                <Space android:layout_width="10dp" android:layout_height="1dp" />
-                <LinearLayout android:layout_width="0dp" android:layout_height="92dp" android:layout_weight="1" android:background="@drawable/dashboard_card_bg" android:gravity="center_vertical" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AJOUTS APP" android:textColor="@color/accent2" android:textSize="11sp" android:textStyle="bold" />
-                    <TextView android:id="@+id/statLocal" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="0" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <TextView android:id="@+id/geoStatus" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:background="@drawable/dashboard_card_bg" android:padding="14dp" android:text="Analyse géographique…" android:textColor="#AEB3BD" android:textSize="12sp" />
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="25dp" android:text="Top pays" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" />
             <LinearLayout android:id="@+id/topCountries" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:background="@drawable/dashboard_card_bg" android:orientation="vertical" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" android:paddingBottom="8dp" />
@@ -131,9 +260,26 @@
             <LinearLayout android:id="@+id/topCities" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:background="@drawable/dashboard_card_bg" android:orientation="vertical" android:paddingLeft="16dp" android:paddingTop="8dp" android:paddingRight="16dp" android:paddingBottom="8dp" />
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Origine des points" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" />
-            <ch.piiwii.visited.StatsChartView android:id="@+id/statsChart" android:layout_width="match_parent" android:layout_height="210dp" android:layout_marginTop="9dp" android:background="@drawable/dashboard_card_bg" />
+            <ch.piiwii.visited.StatsChartView android:id="@+id/statsChart" android:layout_width="match_parent" android:layout_height="190dp" android:layout_marginTop="9dp" android:background="@drawable/dashboard_card_bg" />
+
+            <TextView
+                android:id="@+id/homeOpenPlaces"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/home_secondary_action_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:text="Voir tous mes lieux"
+                android:textColor="#E7E9ED"
+                android:textSize="14sp"
+                android:textStyle="bold" />
         </LinearLayout>
     </ScrollView>
 
-    <ch.piiwii.visited.BottomNavBar android:layout_width="match_parent" android:layout_height="72dp" android:layout_gravity="bottom" />
+    <ch.piiwii.visited.BottomNavBar
+        android:layout_width="match_parent"
+        android:layout_height="72dp"
+        android:layout_gravity="bottom" />
 </FrameLayout>
