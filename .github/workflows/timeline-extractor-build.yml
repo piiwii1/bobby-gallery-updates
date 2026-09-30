@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'build-input/PiiWii-Timeline-Extractor-1.0.0-Sources.zip'
+      - 'build-input/PiiWii-Timeline-Extractor-1.1.0-UI-Sources.zip'
       - '.github/workflows/timeline-extractor-build.yml'
   workflow_dispatch:
 
@@ -38,20 +38,20 @@ jobs:
         run: |
           rm -rf timeline-build
           mkdir -p timeline-build
-          unzip -q build-input/PiiWii-Timeline-Extractor-1.0.0-Sources.zip -d timeline-build
+          unzip -q build-input/PiiWii-Timeline-Extractor-1.1.0-UI-Sources.zip -d timeline-build
       - name: Build installable APK
         working-directory: timeline-build
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Package output
         run: |
           mkdir -p out
-          cp timeline-build/app/build/outputs/apk/debug/app-debug.apk out/PiiWii-Timeline-Extractor-1.0.0.apk
-          cp build-input/PiiWii-Timeline-Extractor-1.0.0-Sources.zip out/PiiWii-Timeline-Extractor-1.0.0-Sources.zip
-          sha256sum out/PiiWii-Timeline-Extractor-1.0.0.apk > out/SHA256.txt
-          sha256sum out/PiiWii-Timeline-Extractor-1.0.0-Sources.zip >> out/SHA256.txt
+          cp timeline-build/app/build/outputs/apk/debug/app-debug.apk out/PiiWii-Timeline-Extractor-1.1.0.apk
+          cp build-input/PiiWii-Timeline-Extractor-1.1.0-UI-Sources.zip out/PiiWii-Timeline-Extractor-1.1.0-Sources.zip
+          sha256sum out/PiiWii-Timeline-Extractor-1.1.0.apk > out/SHA256.txt
+          sha256sum out/PiiWii-Timeline-Extractor-1.1.0-Sources.zip >> out/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: PiiWii-Timeline-Extractor-1.0.0
+          name: PiiWii-Timeline-Extractor-1.1.0
           path: out/*
           retention-days: 7
           if-no-files-found: error
