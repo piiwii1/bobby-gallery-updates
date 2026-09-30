@@ -1,0 +1,53 @@
+name: Visited beta7 preview
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '_piiwii_visited_build/**'
+      - '.github/workflows/_visited_beta7_preview.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build signed debug preview
+        working-directory: _piiwii_visited_build
+        run: gradle --no-daemon --stacktrace assembleDebug
+      - name: Package preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          APK="_piiwii_visited_build/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK"
+          cp "$APK" out/Visited-1.0.0-beta7-PREVIEW.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/Visited-1.0.0-beta7-PREVIEW.apk
+          sha256sum out/Visited-1.0.0-beta7-PREVIEW.apk > out/Visited-1.0.0-beta7-PREVIEW.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Visited-1.0.0-beta7-PREVIEW
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
