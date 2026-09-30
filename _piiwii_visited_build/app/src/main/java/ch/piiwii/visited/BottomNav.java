@@ -2,7 +2,9 @@ package ch.piiwii.visited;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.widget.Button;
 
 public final class BottomNav {
@@ -23,9 +25,14 @@ public final class BottomNav {
         Button[] buttons = {home, map, places, profile};
         for (int i = 0; i < buttons.length; i++) {
             boolean selected = i == active;
-            buttons[i].setTextColor(selected ? Color.WHITE : Color.rgb(170, 174, 184));
-            buttons[i].setAlpha(selected ? 1f : 0.78f);
+            int textColor = selected ? Color.WHITE : Color.rgb(154, 160, 172);
+            int iconColor = selected ? Color.rgb(255, 72, 78) : Color.rgb(139, 145, 158);
+
+            buttons[i].setTextColor(textColor);
+            buttons[i].setCompoundDrawableTintList(ColorStateList.valueOf(iconColor));
+            buttons[i].setAlpha(selected ? 1f : 0.88f);
             buttons[i].setSelected(selected);
+            buttons[i].setTypeface(Typeface.create("sans-serif-medium", selected ? Typeface.BOLD : Typeface.NORMAL));
         }
 
         home.setOnClickListener(v -> open(activity, HomeActivity.class));
