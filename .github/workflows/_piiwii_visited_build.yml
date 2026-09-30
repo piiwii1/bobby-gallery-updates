@@ -52,6 +52,8 @@ jobs:
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" piiwii-visited-output/tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" piiwii-visited-output/tools/
           cp -a "$ANDROID_HOME/build-tools/35.0.0/lib" piiwii-visited-output/tools/
+          if [ -d "$ANDROID_HOME/build-tools/35.0.0/lib64" ]; then cp -a "$ANDROID_HOME/build-tools/35.0.0/lib64" piiwii-visited-output/tools/; fi
+          find piiwii-visited-output/tools -maxdepth 2 -type f -printf '%p\n' | sort
           chmod +x piiwii-visited-output/tools/apksigner piiwii-visited-output/tools/zipalign
           sha256sum piiwii-visited-output/PiiWii-Visited-1.0.0-beta1-unsigned.apk
 
