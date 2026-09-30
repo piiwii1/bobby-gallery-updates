@@ -6,6 +6,11 @@ on:
     paths:
       - 'build-input/timeline110.part*.b64'
       - '.github/workflows/timeline-extractor-110-build.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'build-input/timeline110.part*.b64'
+      - '.github/workflows/timeline-extractor-110-build.yml'
   workflow_dispatch:
 
 jobs:
