@@ -8,6 +8,9 @@ on:
       - '.github/workflows/_visited_beta7_preview.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,6 +48,22 @@ jobs:
           cp "$APK" out/Visited-1.0.0-beta7-PREVIEW.apk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs out/Visited-1.0.0-beta7-PREVIEW.apk
           sha256sum out/Visited-1.0.0-beta7-PREVIEW.apk > out/Visited-1.0.0-beta7-PREVIEW.sha256
+      - name: Publish direct APK in build repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _visited_preview
+          cp out/Visited-1.0.0-beta7-PREVIEW.apk _visited_preview/
+          cp out/Visited-1.0.0-beta7-PREVIEW.sha256 _visited_preview/
+          git config user.name "ChatGPT Build"
+          git config user.email "actions@users.noreply.github.com"
+          git add _visited_preview
+          if git diff --cached --quiet; then
+            echo "Preview already published"
+          else
+            git commit -m "Publish Visited beta7 preview APK"
+            git push
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: Visited-1.0.0-beta7-PREVIEW
