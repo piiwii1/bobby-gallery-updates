@@ -5,7 +5,6 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.util.AttributeSet;
 import android.widget.Button;
-import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import java.lang.reflect.Method;
@@ -16,20 +15,24 @@ public class Beta4PlusButton extends Button {
     }
 
     @Override public boolean performClick() {
+        super.performClick();
         showMenu();
         return true;
     }
 
     private void showMenu() {
-        PopupMenu popup = new PopupMenu(getContext(), this);
-        popup.getMenu().add("Me localiser");
-        popup.getMenu().add("Ajouter");
-        popup.setOnMenuItemClickListener(item -> {
-            if ("Me localiser".contentEquals(item.getTitle())) invokeMain("locateMe");
-            else if ("Ajouter".contentEquals(item.getTitle())) invokeMain("showAddMenu");
-            return true;
-        });
-        popup.show();
+        VisitedActionSheet.show(
+                getContext(),
+                "Que veux-tu faire ?",
+                "Accès rapide à ta carte Visited",
+                new String[]{"⌖", "+"},
+                new String[]{"Me localiser", "Ajouter un lieu"},
+                new String[]{"Recentrer la carte sur ma position", "Enregistrer un nouvel endroit visité"},
+                which -> {
+                    if (which == 0) invokeMain("locateMe");
+                    else if (which == 1) invokeMain("showAddMenu");
+                }
+        );
     }
 
     private void invokeMain(String methodName) {
