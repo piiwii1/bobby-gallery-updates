@@ -14,10 +14,10 @@ public final class BottomNav {
     private BottomNav() {}
 
     public static void setup(Activity activity, int active) {
-        Button home = activity.findViewById(R.id.navHome);
-        Button map = activity.findViewById(R.id.navMap);
-        Button places = activity.findViewById(R.id.navPlaces);
-        Button profile = activity.findViewById(R.id.navProfile);
+        Button home = activity.findViewById(R.id.bottomHome);
+        Button map = activity.findViewById(R.id.bottomMap);
+        Button places = activity.findViewById(R.id.bottomPlaces);
+        Button profile = activity.findViewById(R.id.bottomProfile);
         if (home == null || map == null || places == null || profile == null) return;
 
         Button[] buttons = {home, map, places, profile};
