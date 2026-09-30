@@ -46,7 +46,9 @@ jobs:
         run: |
           mkdir -p out
           cp timeline-build/app/build/outputs/apk/debug/app-debug.apk out/PiiWii-Timeline-Extractor-1.0.0.apk
+          cp build-input/PiiWii-Timeline-Extractor-1.0.0-Sources.zip out/PiiWii-Timeline-Extractor-1.0.0-Sources.zip
           sha256sum out/PiiWii-Timeline-Extractor-1.0.0.apk > out/SHA256.txt
+          sha256sum out/PiiWii-Timeline-Extractor-1.0.0-Sources.zip >> out/SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: PiiWii-Timeline-Extractor-1.0.0
