@@ -8,7 +8,7 @@
         android:allowBackup="true"
         android:icon="@drawable/piiwii_visited_icon"
         android:roundIcon="@drawable/piiwii_visited_icon"
-        android:label="PiiWii Visited"
+        android:label="Visited"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
