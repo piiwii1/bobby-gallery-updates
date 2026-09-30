@@ -1,0 +1,38 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginBottom="72dp"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Profil" android:textColor="@color/text" android:textSize="29sp" android:textStyle="bold" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Réglages et synchronisation" android:textColor="@color/text_dim" android:textSize="15sp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="22dp" android:background="@drawable/card_bg" android:orientation="vertical" android:padding="18dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Google My Maps" android:textColor="@color/text" android:textSize="20sp" android:textStyle="bold" />
+                <TextView android:id="@+id/profileMapCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="0 points My Maps" android:textColor="@color/text_dim" android:textSize="14sp" />
+                <Button android:id="@+id/btnSyncMyMaps" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="18dp" android:background="@drawable/btn_round" android:text="SYNCHRONISER MA CARTE" android:textColor="@color/text" android:textStyle="bold" />
+                <Button android:id="@+id/btnOpenMyMaps" style="?android:attr/borderlessButtonStyle" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginTop="8dp" android:text="OUVRIR MA MY MAPS GOOGLE" android:textColor="@color/text" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card_bg" android:orientation="vertical" android:padding="18dp">
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Repères de la carte" android:textColor="@color/text" android:textSize="18sp" android:textStyle="bold" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Le style des points et épingles se règle avec le bouton ⚙ en haut à droite de la Carte." android:textColor="@color/text_dim" android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="18dp" android:gravity="center" android:text="PiiWii Visited · 1.0.0-beta4" android:textColor="@color/text_dim" android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <ch.piiwii.visited.BottomNavBar android:layout_width="match_parent" android:layout_height="72dp" android:layout_gravity="bottom" />
+</FrameLayout>
