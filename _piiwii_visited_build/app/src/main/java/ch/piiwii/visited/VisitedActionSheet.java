@@ -26,10 +26,10 @@ public final class VisitedActionSheet {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(context, 20), dp(context, 12), dp(context, 20), dp(context, 18));
-        card.setBackground(roundRect(Color.rgb(22, 23, 29), 28));
+        card.setBackground(roundRect(context, Color.rgb(22, 23, 29), 28));
 
         View handle = new View(context);
-        GradientDrawable handleBg = roundRect(Color.rgb(83, 86, 96), 10);
+        GradientDrawable handleBg = roundRect(context, Color.rgb(83, 86, 96), 10);
         handle.setBackground(handleBg);
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(dp(context, 42), dp(context, 4));
         hp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -53,11 +53,11 @@ public final class VisitedActionSheet {
             row.setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12));
             row.setClickable(true);
             row.setFocusable(true);
-            row.setBackground(selectorRow());
+            row.setBackground(selectorRow(context));
 
             TextView icon = text(context, icons != null && i < icons.length ? icons[i] : "•", 22, Color.rgb(239, 68, 68), true);
             icon.setGravity(Gravity.CENTER);
-            GradientDrawable iconBg = roundRect(Color.rgb(46, 29, 32), 18);
+            GradientDrawable iconBg = roundRect(context, Color.rgb(46, 29, 32), 18);
             icon.setBackground(iconBg);
             row.addView(icon, new LinearLayout.LayoutParams(dp(context, 46), dp(context, 46)));
 
@@ -69,9 +69,9 @@ public final class VisitedActionSheet {
             words.addView(label);
             if (descriptions != null && i < descriptions.length && descriptions[i] != null && !descriptions[i].isEmpty()) {
                 TextView desc = text(context, descriptions[i], 12, Color.rgb(163, 167, 177), false);
-                LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(-1, -2);
-                dp.topMargin = android.util.TypedValue.complexToDimensionPixelSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 2, context.getResources().getDisplayMetrics());
-                words.addView(desc, dp);
+                LinearLayout.LayoutParams descParams = new LinearLayout.LayoutParams(-1, -2);
+                descParams.topMargin = dp(context, 2);
+                words.addView(desc, descParams);
             }
             row.addView(words, new LinearLayout.LayoutParams(0, -2, 1f));
 
@@ -91,7 +91,7 @@ public final class VisitedActionSheet {
 
         TextView cancel = text(context, "Annuler", 15, Color.rgb(212, 215, 222), true);
         cancel.setGravity(Gravity.CENTER);
-        cancel.setBackground(roundRect(Color.rgb(36, 38, 45), 16));
+        cancel.setBackground(roundRect(context, Color.rgb(36, 38, 45), 16));
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, dp(context, 48));
         cp.topMargin = dp(context, 10);
         card.addView(cancel, cp);
@@ -134,20 +134,20 @@ public final class VisitedActionSheet {
         return p;
     }
 
-    private static GradientDrawable roundRect(int color, int radiusDp) {
+    private static GradientDrawable roundRect(Context c, int color, int radiusDp) {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
         d.setColor(color);
-        d.setCornerRadius(radiusDp * 3f);
+        d.setCornerRadius(dp(c, radiusDp));
         return d;
     }
 
-    private static android.graphics.drawable.StateListDrawable selectorRow() {
+    private static android.graphics.drawable.StateListDrawable selectorRow(Context c) {
         android.graphics.drawable.StateListDrawable s = new android.graphics.drawable.StateListDrawable();
-        GradientDrawable pressed = roundRect(Color.rgb(49, 37, 40), 18);
-        pressed.setStroke(1, Color.rgb(167, 61, 61));
-        GradientDrawable normal = roundRect(Color.rgb(30, 31, 38), 18);
-        normal.setStroke(1, Color.rgb(53, 55, 64));
+        GradientDrawable pressed = roundRect(c, Color.rgb(49, 37, 40), 18);
+        pressed.setStroke(dp(c, 1), Color.rgb(167, 61, 61));
+        GradientDrawable normal = roundRect(c, Color.rgb(30, 31, 38), 18);
+        normal.setStroke(dp(c, 1), Color.rgb(53, 55, 64));
         s.addState(new int[]{android.R.attr.state_pressed}, pressed);
         s.addState(new int[]{}, normal);
         return s;
