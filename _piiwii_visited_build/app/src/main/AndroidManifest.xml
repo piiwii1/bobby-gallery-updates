@@ -15,7 +15,7 @@
 
         <activity android:name=".ProfileActivity" android:screenOrientation="unspecified" />
         <activity android:name=".PlacesActivity" android:screenOrientation="unspecified" />
-        <activity android:name=".MainActivity" android:screenOrientation="unspecified" />
+        <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:theme="@style/MapTheme" />
         <activity
             android:name=".HomeActivity"
             android:exported="true"
