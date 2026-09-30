@@ -13,6 +13,7 @@ on:
       - '.github/workflows/timeline-extractor-110-build.yml'
   workflow_dispatch:
 
+# Verify corrected 1.1.0 build
 jobs:
   build:
     runs-on: ubuntu-latest
