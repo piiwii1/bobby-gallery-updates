@@ -1,6 +1,7 @@
 package ch.piiwii.visited;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -27,6 +28,12 @@ public class HomeActivity extends Activity {
         db = new PlaceDb(this);
         geoStats = new GeoStatsCache(this);
         BottomNav.setup(this, BottomNav.HOME);
+
+        findViewById(R.id.homeOpenMap).setOnClickListener(v ->
+                startActivity(new Intent(this, MainActivity.class)));
+        findViewById(R.id.homeOpenPlaces).setOnClickListener(v ->
+                startActivity(new Intent(this, PlacesActivity.class)));
+
         refreshStats();
         if (db.count() == 0) initialSync();
         else startGeoEnrichment();
@@ -58,22 +65,28 @@ public class HomeActivity extends Activity {
         ((StatsChartView)findViewById(R.id.statsChart)).setData(myMaps, local);
 
         ((TextView)findViewById(R.id.homeSubtitle)).setText(
-                places.isEmpty() ? "Ta carte personnelle de lieux visités" : places.size() + " lieux enregistrés dans ta carte");
+                places.isEmpty() ? "Mes lieux, mes voyages, ma carte" : places.size() + " lieux · une seule carte personnelle");
 
         TextView geoStatus = findViewById(R.id.geoStatus);
+        TextView geoPercent = findViewById(R.id.geoPercent);
+        int percent = places.isEmpty() ? 0 : Math.min(100, Math.round((geo.resolved * 100f) / places.size()));
+        geoPercent.setText(percent + "%");
+
         if (places.isEmpty()) {
             geoStatus.setText("Ajoute des lieux pour voir apparaître les statistiques géographiques.");
         } else if (geo.resolved >= places.size()) {
-            geoStatus.setText("Analyse géographique complète · " + geo.resolved + "/" + places.size() + " lieux identifiés");
+            geoStatus.setText("Tous les lieux sont identifiés par pays et ville.");
         } else {
-            geoStatus.setText("Analyse géographique · " + geo.resolved + "/" + places.size() + " lieux identifiés");
+            geoStatus.setText(geo.resolved + " sur " + places.size() + " lieux déjà identifiés.");
         }
 
-        fillRanking((LinearLayout)findViewById(R.id.topCountries), geo.topCountries, "Les pays apparaîtront ici dès qu'ils seront identifiés.", "pays");
-        fillRanking((LinearLayout)findViewById(R.id.topCities), geo.topCities, "Les villes apparaîtront ici dès qu'elles seront identifiées.", "ville");
+        fillRanking((LinearLayout)findViewById(R.id.topCountries), geo.topCountries,
+                "Les pays apparaîtront ici dès qu'ils seront identifiés.");
+        fillRanking((LinearLayout)findViewById(R.id.topCities), geo.topCities,
+                "Les villes apparaîtront ici dès qu'elles seront identifiées.");
     }
 
-    private void fillRanking(LinearLayout container, List<GeoStatsCache.StatItem> items, String emptyText, String kind) {
+    private void fillRanking(LinearLayout container, List<GeoStatsCache.StatItem> items, String emptyText) {
         container.removeAllViews();
         if (items == null || items.isEmpty()) {
             TextView empty = new TextView(this);
@@ -90,33 +103,35 @@ public class HomeActivity extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(9), 0, dp(9));
+            row.setPadding(0, dp(10), 0, dp(10));
 
             TextView rank = new TextView(this);
             rank.setText(String.valueOf(i + 1));
             rank.setGravity(Gravity.CENTER);
-            rank.setTextColor(Color.rgb(229, 57, 53));
+            rank.setTextColor(Color.rgb(239, 97, 94));
             rank.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             rank.setTextSize(13);
             GradientDrawable rankBg = new GradientDrawable();
-            rankBg.setColor(Color.rgb(42, 29, 31));
-            rankBg.setCornerRadius(dp(12));
+            rankBg.setColor(Color.rgb(52, 29, 32));
+            rankBg.setCornerRadius(dp(13));
+            rankBg.setStroke(dp(1), Color.rgb(89, 43, 47));
             rank.setBackground(rankBg);
             LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(dp(30), dp(30));
-            rp.setMarginEnd(dp(10));
+            rp.setMarginEnd(dp(11));
             row.addView(rank, rp);
 
             TextView name = new TextView(this);
             name.setText(item.name);
             name.setTextColor(Color.WHITE);
             name.setTextSize(14);
+            name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             name.setSingleLine(true);
             LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
             row.addView(name, np);
 
             TextView count = new TextView(this);
             count.setText(item.count + (item.count > 1 ? " lieux" : " lieu"));
-            count.setTextColor(Color.rgb(218, 221, 227));
+            count.setTextColor(Color.rgb(220, 223, 229));
             count.setTextSize(12);
             count.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
             count.setPadding(dp(10), dp(5), dp(10), dp(5));
