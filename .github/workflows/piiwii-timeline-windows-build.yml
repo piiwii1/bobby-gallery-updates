@@ -1,0 +1,67 @@
+name: PiiWii Timeline Extractor Windows 1.0.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'windows-timeline/**'
+      - '.github/workflows/piiwii-timeline-windows-build.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rebuild app source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem windows-timeline/app.part* | Sort-Object Name
+          $content = foreach ($part in $parts) { Get-Content $part.FullName -Raw }
+          Set-Content -Path windows-timeline/app.py -Value ($content -join '') -Encoding UTF8
+      - name: Prepare decoder
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/arkenoi/timeline-export/main/odlh_export.py" -OutFile "windows-timeline/odlh_export.py"
+      - name: Verify Python source
+        run: python -m py_compile windows-timeline/app.py windows-timeline/odlh_export.py
+      - name: Install builder
+        run: python -m pip install --disable-pip-version-check pyinstaller
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
+            --name "PiiWii-Timeline-Extractor-Windows-1.0.0" `
+            --paths "windows-timeline" `
+            "windows-timeline/app.py"
+      - name: Self test
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/PiiWii-Timeline-Extractor-Windows-1.0.0.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+      - name: Package delivery
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path delivery | Out-Null
+          Copy-Item "dist/PiiWii-Timeline-Extractor-Windows-1.0.0.exe" delivery/
+          New-Item -ItemType Directory -Force -Path source-pack | Out-Null
+          Copy-Item windows-timeline/app.py source-pack/
+          Copy-Item windows-timeline/README.md source-pack/
+          Copy-Item windows-timeline/THIRD_PARTY_NOTICES.txt source-pack/
+          Copy-Item windows-timeline/odlh_export.py source-pack/
+          Copy-Item .github/workflows/piiwii-timeline-windows-build.yml source-pack/windows-build.yml
+          Compress-Archive -Path source-pack/* -DestinationPath delivery/PiiWii-Timeline-Extractor-Windows-1.0.0-Sources.zip -Force
+          Get-FileHash delivery/PiiWii-Timeline-Extractor-Windows-1.0.0.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  PiiWii-Timeline-Extractor-Windows-1.0.0.exe" } | Set-Content delivery/SHA256.txt
+          Get-FileHash delivery/PiiWii-Timeline-Extractor-Windows-1.0.0-Sources.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  PiiWii-Timeline-Extractor-Windows-1.0.0-Sources.zip" } | Add-Content delivery/SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Timeline-Extractor-Windows-1.0.0
+          path: delivery/*
+          retention-days: 7
+          if-no-files-found: error
