@@ -17,7 +17,7 @@ from tkinter import messagebox, ttk
 import odlh_export
 
 APP_NAME = "PiiWii Timeline Extractor"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 AVD_NAME = "PiiWiiTimeline"
 API_LEVEL = 33
 SYSTEM_IMAGE = f"system-images;android-{API_LEVEL};google_apis_playstore;x86_64"
@@ -117,3 +117,62 @@ def find_java_home():
             if p.parent.name.lower() == "bin" and java_home_usable(p.parent.parent):
                 return p.parent.parent
     return None
+
+def sdk_env(java_home: Path):
+    e = os.environ.copy()
+    e["JAVA_HOME"] = str(java_home)
+    e["ANDROID_HOME"] = str(SDK)
+    e["ANDROID_SDK_ROOT"] = str(SDK)
+    paths = [SDK / "platform-tools", SDK / "emulator", SDK / "cmdline-tools" / "latest" / "bin", java_home / "bin"]
+    e["PATH"] = os.pathsep.join(str(x) for x in paths) + os.pathsep + e.get("PATH", "")
+    return e
+
+
+def sdkmanager_path():
+    return SDK / "cmdline-tools" / "latest" / "bin" / "sdkmanager.bat"
+
+
+def avdmanager_path():
+    return SDK / "cmdline-tools" / "latest" / "bin" / "avdmanager.bat"
+
+
+def adb_path():
+    return SDK / "platform-tools" / "adb.exe"
+
+
+def emulator_path():
+    return SDK / "emulator" / "emulator.exe"
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title(f"{APP_NAME} {APP_VERSION}")
+        self.geometry("720x440")
+        self.minsize(650, 400)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.worker = None
+        self.emulator_proc = None
+        self.emulator_log_handle = None
+        self.emulator_mode_args = None
+        self.stop_event = threading.Event()
+        self._build_ui()
+
+    def _build_ui(self):
+        frame = ttk.Frame(self, padding=28)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="PiiWii Timeline Extractor", font=("Segoe UI", 22, "bold")).pack(pady=(0, 8))
+        ttk.Label(
+            frame,
+            text="Récupère ta sauvegarde Google Maps Timeline via un Android virtuel local, puis crée automatiquement Timeline.json.",
+            wraplength=620, justify="center"
+        ).pack(pady=(0, 22))
+        self.button = ttk.Button(frame, text="RÉCUPÉRER MES TRAJETS", command=self.start)
+        self.button.pack(ipadx=32, ipady=14, pady=(0, 20))
+        self.progress = ttk.Progressbar(frame, mode="indeterminate", length=560)
+        self.progress.pack(pady=(0, 16))
+        self.status = tk.StringVar(value="Prêt.")
+        ttk.Label(frame, textvariable=self.status, wraplength=620, justify="center").pack(pady=(0, 14))
+        self.detail = tk.StringVar(value="Aucun accès root n'est effectué sur ton téléphone.")
+        ttk.Label(frame, textvariable=self.detail, wraplength=620, justify="center", foreground="#555").pack()
+        ttk.Label(frame, text="Sortie : Documents\\PiiWii Timeline", foreground="#777").pack(side="bottom", pady=(14, 0))
