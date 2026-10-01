@@ -13,7 +13,7 @@ on:
       - '.github/workflows/timeline-extractor-110-build.yml'
   workflow_dispatch:
 
-# Verify corrected 1.1.0 build
+# Verification rerun after Android constant fix
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rebuild sources
+      - name: Rebuild and patch sources
         shell: bash
         run: |
           set -e
@@ -52,6 +52,9 @@ jobs:
           rm -rf timeline-build
           mkdir -p timeline-build
           unzip -q PiiWii-Timeline-Extractor-1.1.0-Sources.zip -d timeline-build
+          sed -i 's/Settings\.ACTION_LOCATION_SETTINGS/Settings.ACTION_LOCATION_SOURCE_SETTINGS/g' timeline-build/app/src/main/java/ch/piiwii/timelineextractor/MainActivity.java
+          rm -f PiiWii-Timeline-Extractor-1.1.0-Sources.zip
+          (cd timeline-build && zip -qr ../PiiWii-Timeline-Extractor-1.1.0-Sources.zip .)
 
       - name: Build installable APK
         working-directory: timeline-build
