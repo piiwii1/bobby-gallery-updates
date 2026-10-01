@@ -1,4 +1,13 @@
         self.start_emulator(env)
+        if self.is_rooted(env):
+            return
+        self.ui("Activation de l'accès Timeline dans l'Android virtuel…", "L'émulateur va redémarrer automatiquement.")
+        rel_ramdisk = rf"system-images\android-{API_LEVEL}\google_apis_playstore\x86_64\ramdisk.img"
+        p = run([os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", ROOTAVD / "rootAVD.bat", rel_ramdisk], env=env, cwd=ROOTAVD, timeout=600, check=False, hidden=True)
+        if p.returncode != 0:
+            raise RuntimeError("rootAVD n'a pas pu préparer l'émulateur.\n" + (p.stdout or "")[-1200:])
+        time.sleep(4)
+        self.start_emulator(env)
         end = time.time() + 120
         while time.time() < end:
             if self.is_rooted(env):
