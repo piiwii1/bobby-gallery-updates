@@ -1,0 +1,16 @@
+odlh_export.py
+Source: https://github.com/arkenoi/timeline-export
+License: MIT
+Copyright (c) 2026 Alex Smirnoff
+
+rootAVD
+Source: https://github.com/galihlasahido/rootAVD
+License: GPL-3.0 (downloaded and executed separately at runtime)
+
+Eclipse Temurin JDK 17
+Source: https://adoptium.net/
+Downloaded at runtime when Java is unavailable.
+
+Android SDK command-line tools / Emulator / Google Play system image
+Source: Google Android Developers / sdkmanager
+Downloaded at runtime after the user accepts the Android SDK licenses.
