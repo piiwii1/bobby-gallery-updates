@@ -1,61 +1,4 @@
 
-def sdk_env(java_home: Path):
-    e = os.environ.copy()
-    e["JAVA_HOME"] = str(java_home)
-    e["ANDROID_HOME"] = str(SDK)
-    e["ANDROID_SDK_ROOT"] = str(SDK)
-    paths = [SDK / "platform-tools", SDK / "emulator", SDK / "cmdline-tools" / "latest" / "bin", java_home / "bin"]
-    e["PATH"] = os.pathsep.join(str(x) for x in paths) + os.pathsep + e.get("PATH", "")
-    return e
-
-
-def sdkmanager_path():
-    return SDK / "cmdline-tools" / "latest" / "bin" / "sdkmanager.bat"
-
-
-def avdmanager_path():
-    return SDK / "cmdline-tools" / "latest" / "bin" / "avdmanager.bat"
-
-
-def adb_path():
-    return SDK / "platform-tools" / "adb.exe"
-
-
-def emulator_path():
-    return SDK / "emulator" / "emulator.exe"
-
-
-class App(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title(f"{APP_NAME} {APP_VERSION}")
-        self.geometry("720x440")
-        self.minsize(650, 400)
-        self.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.worker = None
-        self.emulator_proc = None
-        self.stop_event = threading.Event()
-        self._build_ui()
-
-    def _build_ui(self):
-        frame = ttk.Frame(self, padding=28)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="PiiWii Timeline Extractor", font=("Segoe UI", 22, "bold")).pack(pady=(0, 8))
-        ttk.Label(
-            frame,
-            text="Récupère ta sauvegarde Google Maps Timeline via un Android virtuel local, puis crée automatiquement Timeline.json.",
-            wraplength=620, justify="center"
-        ).pack(pady=(0, 22))
-        self.button = ttk.Button(frame, text="RÉCUPÉRER MES TRAJETS", command=self.start)
-        self.button.pack(ipadx=32, ipady=14, pady=(0, 20))
-        self.progress = ttk.Progressbar(frame, mode="indeterminate", length=560)
-        self.progress.pack(pady=(0, 16))
-        self.status = tk.StringVar(value="Prêt.")
-        ttk.Label(frame, textvariable=self.status, wraplength=620, justify="center").pack(pady=(0, 14))
-        self.detail = tk.StringVar(value="Aucun accès root n'est effectué sur ton téléphone.")
-        ttk.Label(frame, textvariable=self.detail, wraplength=620, justify="center", foreground="#555").pack()
-        ttk.Label(frame, text="Sortie : Documents\\PiiWii Timeline", foreground="#777").pack(side="bottom", pady=(14, 0))
-
     def ui(self, status=None, detail=None):
         def apply():
             if status is not None:
@@ -96,6 +39,7 @@ class App(tk.Tk):
 
     def on_close(self):
         self.stop_event.set()
+        self._stop_emulator_process()
         self.destroy()
 
     def workflow(self):
@@ -118,3 +62,85 @@ class App(tk.Tk):
             self.ui("Terminé.", f"{export['count']} segments récupérés — de {export['earliest']} à {export['latest']}")
             try:
                 os.startfile(str(export["folder"]))
+            except Exception:
+                pass
+            self.after(0, lambda: messagebox.showinfo(
+                "Extraction terminée",
+                f"{export['count']} segments ont été récupérés.\n\nFichier :\n{export['json']}"
+            ))
+            self.done(True)
+        except Exception as e:
+            self.ui("Échec de l'extraction.", str(e))
+            self.after(0, lambda: messagebox.showerror("PiiWii Timeline Extractor", str(e)))
+            self.done(False)
+
+    def ensure_java(self):
+        home = find_java_home()
+        if home:
+            self.ui(detail=f"Java détecté : {home}")
+            return home
+        self.ui("Installation automatique de Java 17…", "Téléchargement d'Eclipse Temurin.")
+        z = DOWNLOADS / "temurin17.zip"
+        if not z.exists():
+            download(TEMURIN_URL, z)
+        unzip(z, JDK)
+        home = find_java_home()
+        if not home:
+            raise RuntimeError("Java 17 n'a pas pu être installé.")
+        return home
+
+    def ensure_sdk(self, env):
+        if sdkmanager_path().exists() and adb_path().exists() and emulator_path().exists():
+            return
+        if not self.ask_licenses():
+            raise RuntimeError("Installation Android annulée : les licences SDK n'ont pas été acceptées.")
+        self.ui("Installation des outils Android officiels…", "La première installation peut télécharger plusieurs gigaoctets.")
+        z = DOWNLOADS / "commandlinetools.zip"
+        if not z.exists() or sha256(z) != CMDLINE_ZIP_SHA256:
+            if z.exists():
+                z.unlink()
+            download(CMDLINE_ZIP_URL, z)
+        if sha256(z) != CMDLINE_ZIP_SHA256:
+            raise RuntimeError("Le contrôle SHA-256 des outils Android a échoué.")
+        tmp = TOOLS / "cmdline-tmp"
+        unzip(z, tmp)
+        latest = SDK / "cmdline-tools" / "latest"
+        if latest.exists():
+            shutil.rmtree(latest)
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        source = tmp / "cmdline-tools"
+        shutil.move(str(source), str(latest))
+        shutil.rmtree(tmp, ignore_errors=True)
+        env.update(sdk_env(Path(env["JAVA_HOME"])))
+        run([sdkmanager_path(), "--licenses"], env=env, input_text=("y\n" * 200), timeout=300, check=False)
+        run([sdkmanager_path(), "platform-tools", "emulator", SYSTEM_IMAGE], env=env, input_text=("y\n" * 40), timeout=3600)
+
+    def ensure_avd(self, env):
+        avd_dir = Path.home() / ".android" / "avd" / f"{AVD_NAME}.avd"
+        if avd_dir.exists():
+            return
+        self.ui("Création de l'Android virtuel Google Play…", "Android 13 (API 33), isolé de ton téléphone.")
+        run([avdmanager_path(), "create", "avd", "-n", AVD_NAME, "-k", SYSTEM_IMAGE, "-d", "pixel_6", "--force"], env=env, input_text="no\n", timeout=180)
+
+    def ensure_rootavd(self):
+        bat = ROOTAVD / "rootAVD.bat"
+        if bat.exists():
+            return
+        self.ui("Préparation de l'accès à la base Timeline…", "Téléchargement de rootAVD pour l'Android virtuel uniquement.")
+        z = DOWNLOADS / "rootAVD.zip"
+        if not z.exists():
+            download(ROOTAVD_URL, z)
+        tmp = TOOLS / "rootavd-tmp"
+        unzip(z, tmp)
+        roots = list(tmp.glob("rootAVD-*/rootAVD.bat"))
+        if not roots:
+            raise RuntimeError("rootAVD.bat introuvable dans l'archive téléchargée.")
+        src = roots[0].parent
+        if ROOTAVD.exists():
+            shutil.rmtree(ROOTAVD)
+        shutil.move(str(src), str(ROOTAVD))
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    def _adb_emulator_state(self, env):
+        run([adb_path(), "start-server"], env=env, check=False, timeout=30)
+        out = run([adb_path(), "devices"], env=env, check=False, timeout=30).stdout or ""
