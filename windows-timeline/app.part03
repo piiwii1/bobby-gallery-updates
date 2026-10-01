@@ -1,0 +1,118 @@
+        self.start_emulator(env)
+        end = time.time() + 120
+        while time.time() < end:
+            if self.is_rooted(env):
+                return
+            self.ui("Autorisation superutilisateur…", "Si Magisk affiche une demande pour Shell dans l'émulateur, touche 'Autoriser'.")
+            time.sleep(4)
+        raise RuntimeError("L'accès root de l'émulateur n'a pas été accordé. Ouvre Magisk dans l'émulateur et autorise Shell.")
+
+    def launch_maps(self, env):
+        maps = run([adb_path(), "shell", "pm", "path", "com.google.android.apps.maps"], env=env, check=False).stdout
+        if "package:" in maps:
+            run([adb_path(), "shell", "monkey", "-p", "com.google.android.apps.maps", "-c", "android.intent.category.LAUNCHER", "1"], env=env, check=False)
+        else:
+            run([adb_path(), "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", "market://details?id=com.google.android.apps.maps"], env=env, check=False)
+            self.ui("Installe Google Maps dans l'Android virtuel.", "Le Play Store est ouvert automatiquement. Ensuite connecte-toi et restaure Vos trajets.")
+
+    def snapshot_db(self, env, local_dir: Path):
+        local_dir.mkdir(parents=True, exist_ok=True)
+        cmd = (
+            f"rm -rf {SNAP_REMOTE}; mkdir -p {SNAP_REMOTE}; "
+            f"cp {DB_REMOTE}* {SNAP_REMOTE}/ 2>/dev/null; "
+            f"chmod 644 {SNAP_REMOTE}/* 2>/dev/null; ls -l {SNAP_REMOTE}"
+        )
+        p = run([adb_path(), "shell", "su", "-c", cmd], env=env, check=False, timeout=30)
+        if "odlh-storage.db" not in (p.stdout or ""):
+            return None
+        if local_dir.exists():
+            shutil.rmtree(local_dir)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        run([adb_path(), "pull", SNAP_REMOTE + "/.", str(local_dir)], env=env, timeout=120)
+        db = local_dir / "odlh-storage.db"
+        return db if db.exists() else None
+
+    @staticmethod
+    def stats_from_segments(segs):
+        times = []
+        for s in segs:
+            for k in ("startTime", "endTime"):
+                v = s.get(k)
+                if v:
+                    times.append(v)
+        return (len(segs), min(times)[:10] if times else "?", max(times)[:10] if times else "?")
+
+    def wait_for_timeline(self, env):
+        stable = 0
+        last_signature = None
+        best = None
+        scratch = LOCAL / "snapshot"
+        while not self.stop_event.is_set():
+            try:
+                db = self.snapshot_db(env, scratch)
+                if not db:
+                    self.ui(detail="Aucune base Timeline restaurée détectée pour l'instant…")
+                    time.sleep(10)
+                    continue
+                segs, stats = odlh_export.build(str(db), include_paths=True, include_deleted=False)
+                count, earliest, latest = self.stats_from_segments(segs)
+                signature = (count, earliest, latest, db.stat().st_size)
+                self.ui(detail=f"Détecté : {count} segments — {earliest} → {latest}. Vérification de la fin de restauration…")
+                if count > 0 and signature == last_signature:
+                    stable += 1
+                else:
+                    stable = 0
+                last_signature = signature
+                if best is None or count >= best[0]:
+                    best = (count, earliest, latest, list(segs))
+                if count > 0 and stable >= 2:
+                    return self.write_export(env, scratch, best)
+            except Exception as ex:
+                self.ui(detail=f"Timeline en cours de préparation… ({str(ex)[:120]})")
+            time.sleep(20)
+        raise RuntimeError("Opération annulée.")
+
+    def write_export(self, env, scratch: Path, best):
+        count, earliest, latest, segs = best
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        folder = OUTPUT_ROOT / f"PiiWii-Timeline-{stamp}"
+        folder.mkdir(parents=True, exist_ok=True)
+        final_db_dir = folder / "database"
+        db = self.snapshot_db(env, final_db_dir)
+        if db:
+            try:
+                segs, _ = odlh_export.build(str(db), include_paths=True, include_deleted=False)
+                count, earliest, latest = self.stats_from_segments(segs)
+            except Exception:
+                pass
+        json_path = folder / "Timeline.json"
+        json_path.write_text(json.dumps({"semanticSegments": segs}, ensure_ascii=False, indent=2), encoding="utf-8")
+        info = {
+            "app": APP_NAME,
+            "version": APP_VERSION,
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "segments": count,
+            "earliest": earliest,
+            "latest": latest,
+            "source": "Google Maps Timeline restored inside local Android emulator"
+        }
+        (folder / "info.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+        zip_path = OUTPUT_ROOT / f"PiiWii-Timeline-{stamp}.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for p in folder.rglob("*"):
+                if p.is_file():
+                    z.write(p, p.relative_to(folder))
+        return {"count": count, "earliest": earliest, "latest": latest, "folder": folder, "json": json_path, "zip": zip_path}
+
+
+def self_test():
+    assert hasattr(odlh_export, "build")
+    assert len(CMDLINE_ZIP_SHA256) == 64
+    print("SELFTEST OK")
+    return 0
+
+
+if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        raise SystemExit(self_test())
+    App().mainloop()
