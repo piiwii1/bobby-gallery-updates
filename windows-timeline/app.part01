@@ -1,0 +1,120 @@
+
+def sdk_env(java_home: Path):
+    e = os.environ.copy()
+    e["JAVA_HOME"] = str(java_home)
+    e["ANDROID_HOME"] = str(SDK)
+    e["ANDROID_SDK_ROOT"] = str(SDK)
+    paths = [SDK / "platform-tools", SDK / "emulator", SDK / "cmdline-tools" / "latest" / "bin", java_home / "bin"]
+    e["PATH"] = os.pathsep.join(str(x) for x in paths) + os.pathsep + e.get("PATH", "")
+    return e
+
+
+def sdkmanager_path():
+    return SDK / "cmdline-tools" / "latest" / "bin" / "sdkmanager.bat"
+
+
+def avdmanager_path():
+    return SDK / "cmdline-tools" / "latest" / "bin" / "avdmanager.bat"
+
+
+def adb_path():
+    return SDK / "platform-tools" / "adb.exe"
+
+
+def emulator_path():
+    return SDK / "emulator" / "emulator.exe"
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title(f"{APP_NAME} {APP_VERSION}")
+        self.geometry("720x440")
+        self.minsize(650, 400)
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.worker = None
+        self.emulator_proc = None
+        self.stop_event = threading.Event()
+        self._build_ui()
+
+    def _build_ui(self):
+        frame = ttk.Frame(self, padding=28)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="PiiWii Timeline Extractor", font=("Segoe UI", 22, "bold")).pack(pady=(0, 8))
+        ttk.Label(
+            frame,
+            text="Récupère ta sauvegarde Google Maps Timeline via un Android virtuel local, puis crée automatiquement Timeline.json.",
+            wraplength=620, justify="center"
+        ).pack(pady=(0, 22))
+        self.button = ttk.Button(frame, text="RÉCUPÉRER MES TRAJETS", command=self.start)
+        self.button.pack(ipadx=32, ipady=14, pady=(0, 20))
+        self.progress = ttk.Progressbar(frame, mode="indeterminate", length=560)
+        self.progress.pack(pady=(0, 16))
+        self.status = tk.StringVar(value="Prêt.")
+        ttk.Label(frame, textvariable=self.status, wraplength=620, justify="center").pack(pady=(0, 14))
+        self.detail = tk.StringVar(value="Aucun accès root n'est effectué sur ton téléphone.")
+        ttk.Label(frame, textvariable=self.detail, wraplength=620, justify="center", foreground="#555").pack()
+        ttk.Label(frame, text="Sortie : Documents\\PiiWii Timeline", foreground="#777").pack(side="bottom", pady=(14, 0))
+
+    def ui(self, status=None, detail=None):
+        def apply():
+            if status is not None:
+                self.status.set(status)
+            if detail is not None:
+                self.detail.set(detail)
+        self.after(0, apply)
+
+    def ask_licenses(self):
+        result = {"v": False}
+        evt = threading.Event()
+        def ask():
+            result["v"] = messagebox.askyesno(
+                "Licences Android SDK",
+                "La première installation doit télécharger les outils Android officiels et accepter leurs licences.\n\nAccepter et continuer ?"
+            )
+            evt.set()
+        self.after(0, ask)
+        evt.wait()
+        return result["v"]
+
+    def start(self):
+        if self.worker and self.worker.is_alive():
+            return
+        self.stop_event.clear()
+        self.button.config(state="disabled")
+        self.progress.start(10)
+        self.worker = threading.Thread(target=self.workflow, daemon=True)
+        self.worker.start()
+
+    def done(self, ok=True):
+        def f():
+            self.progress.stop()
+            self.button.config(state="normal")
+            if ok:
+                self.button.config(text="RÉCUPÉRER À NOUVEAU")
+        self.after(0, f)
+
+    def on_close(self):
+        self.stop_event.set()
+        self.destroy()
+
+    def workflow(self):
+        try:
+            for p in (TOOLS, DOWNLOADS, OUTPUT_ROOT):
+                p.mkdir(parents=True, exist_ok=True)
+            self.ui("Préparation de l'environnement Windows…", "Cette étape n'est faite qu'une fois.")
+            java_home = self.ensure_java()
+            env = sdk_env(java_home)
+            self.ensure_sdk(env)
+            self.ensure_avd(env)
+            self.ensure_rootavd()
+            self.ensure_emulator_rooted(env)
+            self.launch_maps(env)
+            self.ui(
+                "Connecte-toi à Google dans l'Android virtuel et restaure 'Vos trajets'.",
+                "Dans Google Maps : photo de profil → Vos trajets → sauvegarde/nuage → restaure la sauvegarde. Le programme surveille automatiquement les données."
+            )
+            export = self.wait_for_timeline(env)
+            self.ui("Terminé.", f"{export['count']} segments récupérés — de {export['earliest']} à {export['latest']}")
+            try:
+                os.startfile(str(export["folder"]))
