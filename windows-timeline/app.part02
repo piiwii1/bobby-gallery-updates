@@ -1,0 +1,109 @@
+            except Exception:
+                pass
+            self.after(0, lambda: messagebox.showinfo(
+                "Extraction terminée",
+                f"{export['count']} segments ont été récupérés.\n\nFichier :\n{export['json']}"
+            ))
+            self.done(True)
+        except Exception as e:
+            self.ui("Échec de l'extraction.", str(e))
+            self.after(0, lambda: messagebox.showerror("PiiWii Timeline Extractor", str(e)))
+            self.done(False)
+
+    def ensure_java(self):
+        home = find_java_home()
+        if home:
+            self.ui(detail=f"Java détecté : {home}")
+            return home
+        self.ui("Installation automatique de Java 17…", "Téléchargement d'Eclipse Temurin.")
+        z = DOWNLOADS / "temurin17.zip"
+        if not z.exists():
+            download(TEMURIN_URL, z)
+        unzip(z, JDK)
+        home = find_java_home()
+        if not home:
+            raise RuntimeError("Java 17 n'a pas pu être installé.")
+        return home
+
+    def ensure_sdk(self, env):
+        if sdkmanager_path().exists() and adb_path().exists() and emulator_path().exists():
+            return
+        if not self.ask_licenses():
+            raise RuntimeError("Installation Android annulée : les licences SDK n'ont pas été acceptées.")
+        self.ui("Installation des outils Android officiels…", "La première installation peut télécharger plusieurs gigaoctets.")
+        z = DOWNLOADS / "commandlinetools.zip"
+        if not z.exists() or sha256(z) != CMDLINE_ZIP_SHA256:
+            if z.exists():
+                z.unlink()
+            download(CMDLINE_ZIP_URL, z)
+        if sha256(z) != CMDLINE_ZIP_SHA256:
+            raise RuntimeError("Le contrôle SHA-256 des outils Android a échoué.")
+        tmp = TOOLS / "cmdline-tmp"
+        unzip(z, tmp)
+        latest = SDK / "cmdline-tools" / "latest"
+        if latest.exists():
+            shutil.rmtree(latest)
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        source = tmp / "cmdline-tools"
+        shutil.move(str(source), str(latest))
+        shutil.rmtree(tmp, ignore_errors=True)
+        env.update(sdk_env(Path(env["JAVA_HOME"])))
+        run([sdkmanager_path(), "--licenses"], env=env, input_text=("y\n" * 200), timeout=300, check=False)
+        run([sdkmanager_path(), "platform-tools", "emulator", SYSTEM_IMAGE], env=env, input_text=("y\n" * 40), timeout=3600)
+
+    def ensure_avd(self, env):
+        avd_dir = Path.home() / ".android" / "avd" / f"{AVD_NAME}.avd"
+        if avd_dir.exists():
+            return
+        self.ui("Création de l'Android virtuel Google Play…", "Android 13 (API 33), isolé de ton téléphone.")
+        run([avdmanager_path(), "create", "avd", "-n", AVD_NAME, "-k", SYSTEM_IMAGE, "-d", "pixel_6", "--force"], env=env, input_text="no\n", timeout=180)
+
+    def ensure_rootavd(self):
+        bat = ROOTAVD / "rootAVD.bat"
+        if bat.exists():
+            return
+        self.ui("Préparation de l'accès à la base Timeline…", "Téléchargement de rootAVD pour l'Android virtuel uniquement.")
+        z = DOWNLOADS / "rootAVD.zip"
+        if not z.exists():
+            download(ROOTAVD_URL, z)
+        tmp = TOOLS / "rootavd-tmp"
+        unzip(z, tmp)
+        roots = list(tmp.glob("rootAVD-*/rootAVD.bat"))
+        if not roots:
+            raise RuntimeError("rootAVD.bat introuvable dans l'archive téléchargée.")
+        src = roots[0].parent
+        if ROOTAVD.exists():
+            shutil.rmtree(ROOTAVD)
+        shutil.move(str(src), str(ROOTAVD))
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    def start_emulator(self, env):
+        d = run([adb_path(), "devices"], env=env, check=False).stdout
+        if "emulator-" not in d:
+            self.ui("Démarrage de l'Android virtuel…", "La fenêtre Android va s'ouvrir sur le PC.")
+            self.emulator_proc = subprocess.Popen([str(emulator_path()), "-avd", AVD_NAME, "-no-snapshot-load", "-no-boot-anim", "-gpu", "auto"], env=env)
+        run([adb_path(), "wait-for-device"], env=env, timeout=180)
+        end = time.time() + 240
+        while time.time() < end:
+            if self.stop_event.is_set():
+                raise RuntimeError("Opération annulée.")
+            out = run([adb_path(), "shell", "getprop", "sys.boot_completed"], env=env, check=False).stdout.strip()
+            if out == "1":
+                return
+            time.sleep(2)
+        raise RuntimeError("L'Android virtuel n'a pas terminé son démarrage.")
+
+    def is_rooted(self, env):
+        p = run([adb_path(), "shell", "su", "-c", "id"], env=env, check=False, timeout=15)
+        return "uid=0" in (p.stdout or "")
+
+    def ensure_emulator_rooted(self, env):
+        self.start_emulator(env)
+        if self.is_rooted(env):
+            return
+        self.ui("Activation de l'accès Timeline dans l'Android virtuel…", "L'émulateur va redémarrer automatiquement.")
+        rel_ramdisk = rf"system-images\android-{API_LEVEL}\google_apis_playstore\x86_64\ramdisk.img"
+        p = run([os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", ROOTAVD / "rootAVD.bat", rel_ramdisk], env=env, cwd=ROOTAVD, timeout=600, check=False, hidden=True)
+        if p.returncode != 0:
+            raise RuntimeError("rootAVD n'a pas pu préparer l'émulateur.\n" + (p.stdout or "")[-1200:])
+        time.sleep(4)
