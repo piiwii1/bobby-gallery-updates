@@ -20,7 +20,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager -print -quit 2>/dev/null || true)"
+          echo "SDK directory: $ANDROID_HOME"; ls -l "$ANDROID_HOME" || true
+          if [ -n "$SDKMANAGER" ]; then "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"; fi
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar" || { echo "Android 35 platform missing"; exit 41; }
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt2" || { echo "Android build tools missing"; exit 42; }
           mkdir -p bundle
           cp "$ANDROID_HOME/platforms/android-35/android.jar" bundle/
           cp -a "$ANDROID_HOME/build-tools/35.0.0" bundle/build-tools
