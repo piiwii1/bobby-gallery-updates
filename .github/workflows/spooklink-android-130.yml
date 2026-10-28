@@ -1,0 +1,53 @@
+name: SpookLink Android 1.3.0 APK
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spooklink-android-130.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Prepare SpookLink Android project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,base64,zipfile,io
+          old=Path(".github/workflows/_spooklink_android_1_0_0.yml").read_text()
+          encoded=re.search(r"echo '([A-Za-z0-9+/=]+)' \| base64 -d > source.zip",old)
+          assert encoded, "Baseline project archive not found"
+          with zipfile.ZipFile(io.BytesIO(base64.b64decode(encoded.group(1)))) as zip_file: zip_file.extractall(".")
+          target=Path("android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java")
+          target.write_bytes(Path("spooklink/android/v1.3.0/MainActivity.java").read_bytes())
+          manifest=Path("android/app/build.gradle")
+          code=manifest.read_text().replace("versionCode 1","versionCode 3").replace("versionName '1.0.0'","versionName '1.3.0'")
+          manifest.write_text(code)
+          print("SpookLink 1.3.0 source verified:",target.stat().st_size,"bytes")
+          PY
+      - name: Compile installable debug APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon
+      - name: Copy APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk SpookLink-Android-1.3.0.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpookLink-Android-1.3.0
+          path: SpookLink-Android-1.3.0.apk
+          if-no-files-found: error
+          retention-days: 30
