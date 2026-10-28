@@ -1,0 +1,52 @@
+name: SpookLink Android 2.3.0
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/spooklink-android-230.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Restore full Android project and new UI
+        run: |
+          set -euo pipefail
+          base64 -d spooklink2/build/android-2.1.0.zip.b64 > project.zip
+          unzip -q project.zip
+          base64 -d spooklink2/build/android-2.3.0.patch.xz.b64 | xz -dc > source.patch
+          echo 'ce5aec22f1558ba0a5a4b29b102c1b76d1a6d05ef395c9f7c31c14f769e41082  source.patch' | sha256sum -c -
+          patch -p1 --batch < source.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          f=Path('android/app/build.gradle')
+          v=f.read_text()
+          assert 'versionCode 9' in v and "versionName '2.1.0'" in v, v
+          f.write_text(v.replace('versionCode 9','versionCode 12').replace("versionName '2.1.0'","versionName '2.3.0'"))
+          code=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').read_text()
+          assert 'image_scale' in code and 'text_scale' in code and 'Taille des images' in code and 'Taille des textes' in code
+          print('Android 2.3 source ready')
+          PY
+      - name: Build unsigned release APK
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon
+      - name: Upload compiled APK for permanent signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpookLink-Android-2.3.0-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 14
