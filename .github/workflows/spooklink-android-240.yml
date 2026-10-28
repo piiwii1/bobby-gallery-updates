@@ -31,6 +31,7 @@ jobs:
           import base64,lzma
           src=Path('spooklink2/build/android-2.4.0.java.xz.b64').read_text().strip()
           java=lzma.decompress(base64.b64decode(src))
+          java=java.replace(b'leur page.\n\nLe choix', b'leur page.\\n\\nLe choix')
           assert b'R\xc3\x89GLAGES DES PERSONNAGES' in java
           assert b'R\xc3\x89GLAGES DES MESSAGES' in java
           target=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
