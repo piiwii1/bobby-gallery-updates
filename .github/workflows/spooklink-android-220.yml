@@ -42,7 +42,7 @@ jobs:
                   velocity=Math.max(1,Math.min(10,prefs.getInt("velocity",5)));
                   direction=prefs.getString("direction","left");
                   appendMode=prefs.getBoolean("append",false);''')
-          replace('TextView ver=text("2.1.0",12', 'TextView ver=text("2.2.0",12')
+          replace('TextView ver=text("2.1",12', 'TextView ver=text("2.2.0",12')
           replace('status.setMaxLines(2)', 'status.setMaxLines(3)')
           replace('TextView headline=text("Choisis un personnage",16,WHITE,true);l.addView(headline,lp(-1,31));',
           '''LinearLayout categories=horizontal();
