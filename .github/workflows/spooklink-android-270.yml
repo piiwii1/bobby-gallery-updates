@@ -39,7 +39,7 @@ jobs:
           from pathlib import Path
           baseline=Path('spooklink2/android/v2.5.0/MainActivity.java').read_bytes()
           Path('a.java').write_bytes(baseline)
-          data=Path('spooklink2/android/v2.7.0/update-java.diff.xz.b64').read_text().strip()
+          data=Path('spooklink2/android/v2.6.0/update-java.diff.xz.b64').read_text().strip()
           patch=lzma.decompress(base64.b64decode(data))
           Path('update.diff').write_bytes(patch)
           subprocess.run(['patch','-p0','-i','update.diff'],check=True)
