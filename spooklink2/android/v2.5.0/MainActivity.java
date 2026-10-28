@@ -300,9 +300,7 @@ public final class MainActivity extends Activity {
         choose.setOnClickListener(v->{int index=pcSelector.getSelectedItemPosition();if(index>=0&&index<computers.size()){
             selection=new ArrayList<>(computers.keySet()).get(index);prefs.edit().putString("pc",selection).apply();connected=false;connect(selection);
         }});
-        TextView note=text("Le choix du moniteur reste dans les réglages Windows.
-
-Les réglages des animations sont directement sur les pages Effets, Émojis et Messages.",13,MUTED,false);
+        TextView note=text("Le choix du moniteur reste dans les réglages Windows.\n\nLes réglages des animations sont directement sur les pages Effets, Émojis et Messages.",13,MUTED,false);
         note.setGravity(Gravity.CENTER);l.addView(note,new LinearLayout.LayoutParams(-1,0,1));
         updateComputerList();
     }
