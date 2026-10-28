@@ -1,0 +1,126 @@
+name: SpookLink Android 2.2.0
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/spooklink-android-220.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Rebuild Android sources
+        run: |
+          base64 -d spooklink2/build/android-2.1.0.zip.b64 > project.zip
+          unzip -q project.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          sfile=Path("android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java")
+          s=sfile.read_text()
+          def replace(a,b):
+              global s
+              if a not in s: raise RuntimeError("Missing expected source: "+a[:100])
+              s=s.replace(a,b,1)
+          replace("private int quantity=3,velocity=5;", """private int quantity=3,velocity=5;
+              private boolean appendMode=false;
+              private String category="Halloween";""")
+          replace('selection=prefs.getString("pc","");', '''selection=prefs.getString("pc","");
+                  quantity=Math.max(1,Math.min(30,prefs.getInt("quantity",3)));
+                  velocity=Math.max(1,Math.min(10,prefs.getInt("velocity",5)));
+                  direction=prefs.getString("direction","left");
+                  appendMode=prefs.getBoolean("append",false);''')
+          replace('TextView ver=text("2.1.0",12', 'TextView ver=text("2.2.0",12')
+          replace('status.setMaxLines(2)', 'status.setMaxLines(3)')
+          replace('TextView headline=text("Choisis un personnage",16,WHITE,true);l.addView(headline,lp(-1,31));',
+          '''LinearLayout categories=horizontal();
+                  for(String c:new String[]{"Halloween","Emojis","Favoris","Surprise"}){
+                      Button b=button(c,category.equals(c)?ACCENT:SOFT);b.setTextSize(11);b.setSingleLine(true);
+                      LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(42),1);pp.rightMargin=dp(3);
+                      categories.addView(b,pp);b.setOnClickListener(v->{category=c;show("effects");});
+                  }
+                  l.addView(categories,lp(-1,48));''')
+          replace('String[] names={"Fantôme","Araignée","Chauve-souris","Citrouille","Chaudron","Sorcière","Cœur","Étoile","Emoji"};',
+                  'String[] names={"Fantôme","Araignée","Chauve-souris","Citrouille","Chaudron","Sorcière","Cœur","Étoile","Emoji","Mix Halloween","Mix complet"};')
+          replace('String[] kinds={"ghost","spider","bat","pumpkin","cauldron","witch","heart","star","emoji"};',
+                  'String[] kinds={"ghost","spider","bat","pumpkin","cauldron","witch","heart","star","emoji","mix","mixall"};')
+          replace('String[] extras={"","","","","","","❤️","⭐","🎉"};',
+          '''String[] extras={"","","","","","","❤️","⭐","🎉","🎲","✨"};
+                  java.util.List<Integer> visible=new java.util.ArrayList<>();
+                  if(category.equals("Halloween")) for(int i=0;i<6;i++)visible.add(i);
+                  else if(category.equals("Emojis")) for(int i=6;i<9;i++)visible.add(i);
+                  else if(category.equals("Surprise")){visible.add(9);visible.add(10);}
+                  else {
+                      java.util.Set<String> f=prefs.getStringSet("favs",java.util.Collections.emptySet());
+                      for(int i=0;i<9;i++) if(f.contains(kinds[i])) visible.add(i);
+                  }''')
+          replace('for(int row=0;row<3;row++){','for(int row=0;row<2;row++){')
+          replace('final int at=row*3+col;final String kind=kinds[at];',
+          '''final int at=row*3+col;
+                          if(at>=visible.size()){View blank=new View(this);line.addView(blank,new LinearLayout.LayoutParams(0,-1,1));continue;}
+                          final int chosen=visible.get(at);final String kind=kinds[chosen];''')
+          replace('if(at<6 && previewSheet!=null){','if(chosen<6 && previewSheet!=null){')
+          replace('(at%3)*W,(at/3)*H','(chosen%3)*W,(chosen/3)*H')
+          replace('TextView symbol=text(extras[at],31','TextView symbol=text(extras[chosen],31')
+          replace('TextView label=text(names[at],11','TextView label=text(names[chosen],11')
+          replace('tile.setOnClickListener(v->send(kind,kind.equals("emoji")?"🎉":""));',
+          '''tile.setOnClickListener(v->send(kind,kind.equals("emoji")?"🎉":""));
+                          tile.setOnLongClickListener(v->{
+                              if(chosen>=9)return true;
+                              java.util.Set<String> f=new java.util.HashSet<>(prefs.getStringSet("favs",java.util.Collections.emptySet()));
+                              if(!f.remove(kind))f.add(kind);
+                              prefs.edit().putStringSet("favs",f).apply();
+                              android.widget.Toast.makeText(this,f.contains(kind)?"Ajouté aux favoris":"Retiré des favoris",android.widget.Toast.LENGTH_SHORT).show();
+                              if(category.equals("Favoris"))show("effects");
+                              return true;
+                          });''')
+          replace('TextView q=text("Nombre : "+quantity,12','TextView q=text("Nombre : "+quantity+" / 30",12')
+          replace('TextView sp=text("Vitesse : "+velocity,12','TextView sp=text("Vitesse : "+velocity+" / 10",12')
+          replace('count.setMax(7)', 'count.setMax(29)')
+          replace('q.setText("Nombre : "+quantity);', 'q.setText("Nombre : "+quantity+" / 30");prefs.edit().putInt("quantity",quantity).apply();')
+          replace('sp.setText("Vitesse : "+velocity);', 'sp.setText("Vitesse : "+velocity+" / 10");prefs.edit().putInt("velocity",velocity).apply();')
+          replace('direction=parts[1];show("effects");', 'direction=parts[1];prefs.edit().putString("direction",direction).apply();show("effects");')
+          replace('}l.addView(dirs);\n    }', '''}l.addView(dirs);
+                  android.widget.Switch toggle=new android.widget.Switch(this);
+                  toggle.setTextColor(WHITE);toggle.setTextSize(12);
+                  toggle.setChecked(appendMode);
+                  toggle.setText(appendMode?"Ajouter aux animations en cours":"Remplacer l'animation précédente");
+                  toggle.setOnCheckedChangeListener((b,on)->{
+                      appendMode=on;prefs.edit().putBoolean("append",on).apply();
+                      toggle.setText(on?"Ajouter aux animations en cours":"Remplacer l'animation précédente");
+                  });
+                  l.addView(toggle,lp(-1,43));
+              }''')
+          replace('packet.put("direction",d);post(h', 'packet.put("direction",d);packet.put("mode",appendMode?"append":"replace");post(h')
+          sfile.write_text(s)
+          g=Path("android/app/build.gradle")
+          b=g.read_text()
+          assert "versionCode 9" in b
+          g.write_text(b.replace("versionCode 9","versionCode 11").replace("versionName '2.1.0'","versionName '2.2.0'"))
+          print("SpookLink Android categories/count/mode applied",len(s))
+          PY
+      - name: Compile release
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon
+      - name: Upload source and APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpookLink-Android-2.2.0-output
+          path: |
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java
+            android/app/build.gradle
+          if-no-files-found: error
+          retention-days: 30
