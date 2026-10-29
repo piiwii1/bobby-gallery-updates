@@ -206,6 +206,14 @@ jobs:
           Path('update217.diff').write_bytes(patch)
           subprocess.run(['patch','-p0','-i','update217.diff'],check=True)
           java.write_bytes(Path('a.java').read_bytes())
+          # Avoid shadowing the outer TextView named h in buildSettings.
+          source=java.read_text()
+          assert 'final String selected=monitorIds.get(idx),h=host,t=token;' in source
+          source=source.replace('final String selected=monitorIds.get(idx),h=host,t=token;',
+                                'final String selected=monitorIds.get(idx),screenHost=host,t=token;')
+          source=source.replace('JSONObject answer=post(h,"/v2/displays",request,t);',
+                                'JSONObject answer=post(screenHost,"/v2/displays",request,t);')
+          java.write_text(source)
           gradle=Path('android/app/build.gradle')
           g=gradle.read_text()
           assert 'versionCode 23' in g and "versionName '2.16.0'" in g
