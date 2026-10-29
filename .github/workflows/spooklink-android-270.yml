@@ -46,6 +46,30 @@ jobs:
           patch2=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.7.0/update-java.diff.xz.b64').read_text().strip()))
           Path('update27.diff').write_bytes(patch2)
           subprocess.run(['patch','-p0','-i','update27.diff'],check=True)
+          # Arrange preset messages in two readable rows instead of four narrow chips.
+          java=Path('a.java').read_text()
+          java=java.replace('LinearLayout quick=horizontal();\\n        final String[] phrases=', 'LinearLayout quick=vertical();\\n        LinearLayout topQuick=horizontal(),bottomQuick=horizontal();\\n        final String[] phrases=')
+          old='''for(String phrase:phrases){
+            Button b=button(phrase,SOFT);b.setTextSize(10);b.setSingleLine(true);
+            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
+            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(3);quick.addView(b,q);
+            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});
+        }
+        editor.addView(quick,lp(-1,35));'''
+          updated='''for(int k=0;k<phrases.length;k++){
+            final String phrase=phrases[k];
+            Button b=button(phrase,SOFT);b.setTextSize(12);b.setSingleLine(true);
+            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
+            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(4);
+            (k<2?topQuick:bottomQuick).addView(b,q);
+            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});
+        }
+        quick.addView(topQuick,lp(-1,36));
+        quick.addView(bottomQuick,lp(-1,36));
+        editor.addView(quick,lp(-1,72));'''
+          assert old in java
+          java=java.replace(old,updated)
+          Path('a.java').write_text(java)
           source=Path('a.java').read_bytes()
           assert b'renderMessageBitmap' in source and b'message_png' in source
           assert b'makeEmojiPng' in source and b'message_style' in source and b'buildEmojis' in source
