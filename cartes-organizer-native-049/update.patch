@@ -1,0 +1,41 @@
+diff -ruN co048/app/build.gradle co049/app/build.gradle
+--- co048/app/build.gradle
++++ co049/app/build.gradle
+@@ -6,8 +6,8 @@
+         applicationId 'ch.piiwii.cartesorganizer'
+         minSdk 29
+         targetSdk 35
+-        versionCode 16
+-        versionName '0.4.8'
++        versionCode 17
++        versionName '0.4.9'
+     }
+     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ }
+diff -ruN co048/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java co049/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+--- co048/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
++++ co049/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+@@ -1029,10 +1029,14 @@
+             if(!complete)try{getContentResolver().delete(uri,null,null);}catch(Exception ignored){}
+         }
+     }
++    // This is an image share, with a text caption: the recipient app chooses how
++    // to show the caption. Keep ACTION_SEND and the MediaStore URI (tested in 0.4.8).
++    private static final String WHATSAPP_CAPTION="Voici la carte postale de la semaine, merci d'avance.";
+     private Intent imageShareIntent(Uri imageUri,String mime) {
+         Intent send=new Intent(Intent.ACTION_SEND);
+         send.setType(mime);
+         send.putExtra(Intent.EXTRA_STREAM,imageUri);
++        send.putExtra(Intent.EXTRA_TEXT,WHATSAPP_CAPTION);
+         send.setClipData(ClipData.newRawUri("Carte Organizer",imageUri));
+         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+         return send;
+@@ -1065,7 +1069,7 @@
+                 // has already been copied into MediaStore and can survive it.
+                 grantUriPermission(pkg,imageUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                 startActivity(send);
+-                toast("Carte prête dans WhatsApp. Sélectionne le contact puis confirme l'envoi.");
++                toast("Carte et message prêts. Choisis le contact puis confirme l'envoi.");
+             }catch(Exception e){
+                 sheet("Envoi de la carte",new String[]{
+                     "Partager par le menu Android",
