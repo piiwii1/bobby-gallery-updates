@@ -35,7 +35,10 @@ jobs:
           grep -Fq 'server_manifest_040' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           if grep -R -n 'android.webkit.WebView' android-native/app/src/main; then exit 1; fi
       - name: Build native APK
-        run: gradle --no-daemon -p android-native :app:assembleDebug
+        run: |
+          # Correct a JSONArray length accessor in the generated source.
+          sed -i 's/a("cards").length==0/a("cards").length()==0/g' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+          gradle --no-daemon -p android-native :app:assembleDebug
       - name: Verify APK and package sources
         run: |
           set -euo pipefail
