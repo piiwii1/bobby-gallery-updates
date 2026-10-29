@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/cartes-organizer-native-053.yml'
+      - 'cartes-organizer-native-053/update.patch'
   workflow_dispatch:
 permissions:
   contents: read
