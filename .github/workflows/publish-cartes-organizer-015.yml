@@ -1,0 +1,39 @@
+name: Publish Cartes Organizer 0.4.15 signed APK — direct download
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cartes-organizer-native-055/Cartes-Organizer-Android-0.4.15.apk.b64'
+      - '.github/workflows/publish-cartes-organizer-015.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Reconstruct and verify signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p downloads
+          base64 -d cartes-organizer-native-055/Cartes-Organizer-Android-0.4.15.apk.b64 > downloads/Cartes-Organizer-Android-0.4.15.apk
+          printf '%s  %s\n' 'f22b8ae6997d628cff00745dd8fadd232a8f786b3866bdecb2dc7c9e8eace56e' downloads/Cartes-Organizer-Android-0.4.15.apk | sha256sum --check
+          file downloads/Cartes-Organizer-Android-0.4.15.apk
+      - name: Publish direct APK download in repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add downloads/Cartes-Organizer-Android-0.4.15.apk
+          if git diff --cached --quiet; then
+            echo 'Already published'
+          else
+            git commit -m 'Publish signed Cartes Organizer 0.4.15 APK'
+            git push origin HEAD:main
+          fi
