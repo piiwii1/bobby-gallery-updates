@@ -1,0 +1,53 @@
+name: Cartes Organizer Android 0.4.0 — Native WordPress-first
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cartes-organizer-native-040.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Prepare native project
+        run: |
+          set -euo pipefail
+          base64 -d cartes-organizer-native-040/project.zip.b64 > /tmp/cartes040.zip
+          mkdir -p android-native
+          unzip -q /tmp/cartes040.zip -d android-native
+          grep -Fq 'versionName '\''0.4.0'\''' android-native/app/build.gradle
+          grep -Fq 'slotCooldownMillis' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+          grep -Fq 'server_manifest_040' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+          if grep -R -n 'android.webkit.WebView' android-native/app/src/main; then exit 1; fi
+      - name: Build native APK
+        run: gradle --no-daemon -p android-native :app:assembleDebug
+      - name: Verify APK and package sources
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android-native/app/build/outputs/apk/debug/app-debug.apk dist/Cartes-Organizer-Android-0.4.0.apk
+          (cd android-native && zip -q -r ../dist/Cartes-Organizer-Android-0.4.0-sources.zip app/src/main app/build.gradle build.gradle settings.gradle)
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Cartes-Organizer-Android-0.4.0.apk > dist/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/Cartes-Organizer-Android-0.4.0.apk | head -8 > dist/APK-INFO.txt
+          sha256sum dist/Cartes-Organizer-Android-0.4.0.apk > dist/SHA256SUMS.txt
+          printf 'versionName=0.4.0\nversionCode=8\nplugin=0.3.8\nsite=https://piiwii.ch\nwebview=no\nrequiresFirstAuthorization=yes\n' > dist/BUILD-INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cartes-Organizer-Android-0.4.0
+          path: dist/*
+          retention-days: 30
