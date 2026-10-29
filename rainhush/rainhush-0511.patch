@@ -1,0 +1,359 @@
+--- a/windows/Cargo.toml
++++ b/windows/Cargo.toml
+@@ -1,6 +1,6 @@
+ [package]
+ name = "snowhush"
+-version = "0.5.10"
++version = "0.5.11"
+ edition = "2024"
+ publish = false
+ autobins = false
+--- a/windows/src/simulation.rs
++++ b/windows/src/simulation.rs
+@@ -250,6 +250,8 @@
+     target_flakes: usize,
+     /// Virtual seconds of rain; drying runs in reverse after the rain stops.
+     puddle_rain_time: f32,
++    /// Only visible when a bottom-docked taskbar exists.
++    pub puddles_on_taskbar: bool,
+     strength_target: f32,
+     next_shift: f64,
+     air: Air,
+@@ -278,6 +280,7 @@
+             space_changed_at: -10.0,
+             target_flakes: 0,
+             puddle_rain_time: 0.0,
++            puddles_on_taskbar: false,
+             strength_target: 1.0,
+             next_shift: 0.0,
+             air: Air {
+@@ -347,7 +350,8 @@
+     }
+ 
+     pub fn sprite_count(&self) -> usize {
+-        self.air.flakes.len() + self.air.grains.len() + self.air.motes.len() + self.puddle_count()
++        self.air.flakes.len() + self.air.grains.len() + self.air.motes.len()
++            + if self.puddles_on_taskbar { self.puddle_count() } else { 0 }
+     }
+ 
+     fn puddle_amount(&self, start: f32) -> f32 {
+@@ -462,18 +466,22 @@
+         });
+         // Irregular pools: asymmetric locations, dimensions, edges and arrival times.
+         // Their positions vary with each monitor's proportions; never aligned in a grid.
+-        let variation = (self.width * 0.0217 + self.height * 0.0043).sin();
+-        let first_x = self.width * (0.12 + variation * 0.055);
+-        let second_x = self.width * (0.71 + (variation * 2.7 + 1.3).sin() * 0.16);
++        // Pools lie ON the lower overlay boundary (the work area ends at the taskbar).
++        // These are 3-9 px high wet traces, not floating oval blobs.
++        // The two locations/widths differ and change with monitor geometry.
++        let variation = (self.width * 0.0197 + self.height * 0.0131).sin();
++        let first_x = self.width * (0.24 + variation * 0.095);
++        let second_x = self.width * (0.71 + (variation * 3.1 + 1.8).sin() * 0.14);
+         let puddles = [(first_x, 18.0, 0.0), (second_x, 67.0, 1.0)].into_iter().filter_map(|(x, start, style)| {
+             let amount = self.puddle_amount(start);
+-            (amount > 0.001).then(|| Sprite {
+-                // Coordinates point upwards from the top edge of the taskbar.
+-                position: V2::new(x, if style < 0.5 { 11.0 } else { 15.0 }),
+-                velocity: V2::new((90.0 + (160.0 + style * 125.0) * amount).min(self.width * 0.29),
+-                                  (14.0 + (14.0 + 11.0 * style) * amount)),
++            (self.puddles_on_taskbar && amount > 0.001).then(|| Sprite {
++                // y=0 is exactly the top edge of a bottom-docked taskbar.
++                // Vertex shader expands the quad UPWARD from y=0, never centering it.
++                position: V2::new(x, 0.0),
++                velocity: V2::new((100.0 + (164.0 + style * 65.0) * amount).min(self.width * 0.31),
++                                  6.0 + 4.5 * amount + 1.7 * style),
+                 size: 1.0,
+-                alpha: amount * (if style < 0.5 { 0.78 } else { 0.68 }),
++                alpha: amount * (if style < 0.5 { 0.91 } else { 0.82 }),
+                 tint: [0.31, 0.64, 0.91],
+                 tint_amount: 1.0,
+                 lump: -1.0 - style,
+--- a/windows/src/snow.rs
++++ b/windows/src/snow.rs
+@@ -353,6 +353,7 @@
+ fn new_simulation(monitor: &Monitor, settings: &Settings) -> SnowSimulation {
+     let (width, height) = dip_size(monitor);
+     let mut simulation = SnowSimulation::new(width as f32, height as f32, settings.snowfall);
++    simulation.puddles_on_taskbar = monitor.rect.bottom < monitor.bounds.bottom;
+     simulation.thaws = settings.melt;
+     simulation.accumulates = settings.accumulate;
+     simulation.set_snowfall_held(!settings.welcomed);
+--- a/windows/src/shaders.hlsl
++++ b/windows/src/shaders.hlsl
+@@ -47,8 +47,12 @@
+         float2 corner = float2(float(s.vid & 1), float(s.vid >> 1));
+         SpriteOut puddle;
+         float2 center = s.position / viewSize * 2.0 - 1.0;
+-        puddle.position = float4(center + (corner - 0.5) * width * 2.0 / (viewSize * scale), 0.0, 1.0);
+-        puddle.coord = float2(corner.x, 1.0 - corner.y);
++        // The puddle rectangle starts exactly at the lower overlay edge.
++        // 0=taskbar top, up to a few pixels ABOVE the edge, no hovering oval.
++        float x = center.x + (corner.x - 0.5) * width * 2.0 / (viewSize.x * scale);
++        float y = center.y + corner.y * height * 2.0 / (viewSize.y * scale);
++        puddle.position = float4(x, y, 0.0, 1.0);
++        puddle.coord = corner;
+         puddle.streak = float2(1.0, height / width);
+         puddle.radius = 0.5;
+         puddle.alpha = saturate(s.alpha);
+@@ -84,21 +88,28 @@
+ 
+ float4 spriteFragment(SpriteOut i) : SV_Target {
+     if (i.lump < 0.0) {
+-        float2 q = float2((i.coord.x - 0.5) * 2.0, (0.5 - i.coord.y) * 2.0);
+-        // Side lobes make a pool uneven, not a perfectly straight oval.
+-        float angle = atan2(q.y, q.x);
++        // Thin puddle/wet surface flush with the taskbar. y=0 is ground.
++        // No bottom ellipse: the entire base joins the bottom border perfectly.
++        float x = i.coord.x * 2.0 - 1.0;
++        float y = saturate(i.coord.y);
+         float style = -i.lump;
+-        float r = length(q) * (1.0 + 0.075 * sin(angle * 5.0 + style * 2.7)
+-                                  + 0.065 * sin(angle * 9.0 + style * 4.3));
+-        float outer = 1.0 - smoothstep(0.87, 1.0, r);
+-        if (outer < 0.003) discard;
+-        float rim = smoothstep(0.72, 0.97, r);
+-        float shimmer = 0.5 + 0.5 * sin(time * 1.1 + q.x * 8.0 + style);
+-        float highlight = smoothstep(0.9, 0.3, abs(q.y - 0.45))
+-                        * smoothstep(0.95, 0.3, abs(q.x + 0.13)) * shimmer;
+-        float3 water = lerp(float3(0.15, 0.32, 0.51), float3(0.63, 0.85, 1.0), 0.48 * rim + 0.19 * highlight);
++        float side = saturate((1.0 - abs(x)) * 9.0);
++        float scallop = 0.045 * sin(x * 18.0 + style * 2.7)
++                      + 0.054 * sin(x * 32.0 - style * 4.2)
++                      + 0.022 * sin(x * 63.0 + style * 6.0);
++        float taper = pow(saturate(1.0 - abs(x)), 0.63);
++        float top = saturate((0.55 + scallop) * taper);
++        float wet = side * (1.0 - smoothstep(top - 0.13, top + 0.025, y));
++        if (wet < 0.003) discard;
++        // A hairline reflection follows the irregular liquid outline.
++        float rim = 1.0 - smoothstep(0.018, 0.075, abs(y - max(top - 0.055, 0.02)));
++        float ripple = pow(saturate(0.5 + 0.5 * sin(time * 0.65 + x * 19.0 + style * 4.5)), 5.0);
++        float gleam = rim * (0.42 + 0.2 * ripple);
++        float3 darkWater = float3(0.10, 0.32, 0.49);
++        float3 brightWater = float3(0.58, 0.84, 0.97);
++        float3 water = lerp(darkWater, brightWater, gleam);
+         water *= light.rgb;
+-        float a = i.alpha * outer * (0.71 + rim * 0.29);
++        float a = saturate(i.alpha * wet * (0.72 + gleam * 0.28));
+         return float4(water * a, a);
+     }
+     // Quad coordinates run down the screen; velocities run up.
+--- a/windows/src/glass.rs
++++ b/windows/src/glass.rs
+@@ -11,7 +11,7 @@
+ use windows::Win32::UI::WindowsAndMessaging::{
+     CallNextHookEx, GetCursorPos, HHOOK, IMAGE_CURSOR, LR_LOADFROMFILE, LoadImageW, OCR_NORMAL,
+     SPI_SETCURSORS, SetSystemCursor, SetWindowsHookExW, SystemParametersInfoW,
+-    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, UnhookWindowsHookEx, WH_MOUSE_LL, WM_APP, WM_RBUTTONDOWN, PostMessageW,
++    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, UnhookWindowsHookEx, WH_MOUSE_LL, WM_APP, WM_RBUTTONDOWN, WM_RBUTTONUP, PostMessageW,
+ };
+ use windows::core::{Interface, PCWSTR, w};
+ 
+@@ -40,7 +40,7 @@
+     }
+     let Ok(exe) = std::env::current_exe() else { return };
+     let _ = std::fs::create_dir_all(storage());
+-    let icon = storage().join("verre-eau.ico");
++    let icon = storage().join("verre-eau-0511.ico");
+     let _ = std::fs::write(&icon, image_file(7, false, false));
+     let exew = wide(exe.as_os_str());
+     let iconw = wide(icon.as_os_str());
+@@ -58,45 +58,95 @@
+     }
+ }
+ 
+-/// Source artwork is generated as a 48x48 32-bit BGRA icon or cursor. No external assets.
++/// Smooth 64x64 transparent cup. 3x3 supersampling avoids the blocky 48px icon.
++/// Glass walls, a curved rim, wavy water, reflections and a tilted pour are rasterized
++/// without external assets, so the installed EXE remains completely self-contained.
+ fn image_file(fill: u8, tilted: bool, cursor: bool) -> Vec<u8> {
+-    const N: usize = 48;
+-    let mut pixels = Vec::with_capacity(N*N*4);
+-    let theta: f32 = if tilted { -0.64 } else { 0.0 };
+-    let c = theta.cos();
+-    let s = theta.sin();
+-    for y in (0..N).rev() {
+-        for x in 0..N {
+-            let xx = x as f32 - 24.0;
+-            let yy = y as f32 - 22.0;
+-            let px = xx*c + yy*s + 24.0;
+-            let py = -xx*s + yy*c + 22.0;
+-            let mut b = 0u8; let mut g = 0u8; let mut r = 0u8; let mut a = 0u8;
+-            let mouth = (px-24.0).powi(2)/140.0 + (py-9.0).powi(2)/13.0;
+-            let edge_left = 12.5 + (py-9.0)*0.055;
+-            let edge_right = 35.5 - (py-9.0)*0.055;
+-            let body = py >= 10.0 && py <= 37.0 && px >= edge_left && px <= edge_right;
+-            let inside = py >= 11.5 && py <= 36.0 && px > edge_left+2.0 && px < edge_right-2.0;
+-            if body {
+-                (b,g,r,a) = (178, 139, 108, 185);
+-                if inside { (b,g,r,a) = (210, 202, 190, 62); }
+-                if inside && py >= 37.0 - (fill as f32/10.0)*25.0 {
+-                    (b,g,r,a) = (255, 175 + (px as u8 % 15), 32, 218);
+-                    if ((px-20.0).powi(2)+(py-17.0).powi(2)) < 5.0 { (b,g,r,a)=(255,236,149,235); }
+-                }
+-                if px < edge_left+2.4 || px > edge_right-2.4 || py > 34.8 {
+-                    (b,g,r,a)=(188,148,116,239);
+-                }
+-            }
+-            if mouth <= 1.0 && (mouth >= 0.51 || py < 8.7) { (b,g,r,a)=(233,219,204,255); }
+-            if py >= 38.0 && py <= 40.0 && (px-24.0).abs() < 11.0 { (b,g,r,a)=(200,170,145,221); }
+-            if tilted && x > 36 && y > 15 && y < 32 && (x + 2*y)%7 < 3 {
+-                (b,g,r,a)=(250,159,25,225);
+-            }
+-            pixels.extend_from_slice(&[b,g,r,a]);
+-        }
+-    }
+-    // ICO/CUR with BITMAPINFOHEADER and a standard 1-bit transparency mask.
++    const N: usize = 64;
++    const SAMPLES: usize = 3;
++    let level = fill.min(10) as f32 / 10.0;
++    let mut pixels: Vec<u8> = Vec::with_capacity(N * N * 4);
++    for row in (0..N).rev() {
++        for col in 0..N {
++            let (mut rr,mut gg,mut bb,mut aa) = (0f32,0f32,0f32,0f32);
++            for sy in 0..SAMPLES { for sx in 0..SAMPLES {
++                let x = col as f32 + (sx as f32+0.5)/SAMPLES as f32;
++                let y = row as f32 + (sy as f32+0.5)/SAMPLES as f32;
++                let (cx, cy) = (31.5f32,30.5f32);
++                let angle: f32 = if tilted { 0.73 } else { 0.0 };
++                let (co,si)=(angle.cos(),angle.sin());
++                let gx=(x-cx)*co+(y-cy)*si+cx;
++                let gy=-(x-cx)*si+(y-cy)*co+cy;
++                let xl=15.2 + (gy-14.2)*0.105;
++                let xr=47.8 - (gy-14.2)*0.105;
++                let inside=gy>=15.0 && gy<=50.5 && gx>=xl && gx<=xr;
++                // Supersampled source-over RGBA (premultiplied accumulators).
++                let mut rgba=[0f32;4];
++                fn paint(dst:&mut [f32;4], color:[f32;3], alpha:f32) {
++                    let a=alpha.clamp(0.0,1.0);
++                    for k in 0..3 { dst[k]=color[k]*a+dst[k]*(1.0-a); }
++                    dst[3]=a+dst[3]*(1.0-a);
++                }
++                // Gentle drop shadow and translucent pale-blue glass.
++                if gy>14.4 && gy<52.0 && gx>xl-1.0 && gx<xr+1.0 {
++                    paint(&mut rgba,[23.0,46.0,63.0],0.12);
++                }
++                if inside {
++                    paint(&mut rgba,[194.0,229.0,244.0],0.20);
++                    let wave=49.1 - level*30.0
++                        + (gx*0.38 + fill as f32*0.45).sin()*0.9;
++                    if gx>xl+1.8 && gx<xr-1.8 && gy>=wave {
++                        let depth=((gy-wave)/29.0).clamp(0.0,1.0);
++                        paint(&mut rgba,[28.0+25.0*depth,149.0-19.0*depth,240.0-30.0*depth],0.77);
++                    }
++                    if level>0.01 && (gy-wave).abs()<0.75 && gx>xl+2.0 && gx<xr-2.0 {
++                        paint(&mut rgba,[209.0,249.0,255.0],0.83);
++                    }
++                    if gx>xl+3.2 && gx<xl+5.0 && gy>18.0 && gy<43.5 {
++                        paint(&mut rgba,[250.0,255.0,255.0],0.38);
++                    }
++                    if level>0.15 {
++                        let b1=((gx-26.3).powi(2)+(gy-41.4).powi(2)).sqrt();
++                        let b2=((gx-37.2).powi(2)+(gy-35.0).powi(2)).sqrt();
++                        if b1<1.4 || (level>0.58 && b2<1.15) {
++                            paint(&mut rgba,[229.0,252.0,255.0],0.63);
++                        }
++                    }
++                    let edge = (gx-xl).min(xr-gx);
++                    if edge<1.4 {paint(&mut rgba,[206.0,237.0,250.0],0.91);}
++                    if (gy-49.5).abs()<1.5 {paint(&mut rgba,[198.0,229.0,244.0],0.86);}
++                }
++                let rim = (((gx-31.5)/16.4).powi(2)+((gy-14.6)/4.4).powi(2)).sqrt();
++                if (rim-1.0).abs()<0.17 {
++                    paint(&mut rgba,[225.0,248.0,255.0],0.97);
++                }
++                // A visible splash while the glass is tipped; movement is drawn, not just rotation.
++                if tilted {
++                    for n in 0..5 {
++                        let t=n as f32;
++                        let dx=x-(43.0+t*2.65);
++                        let dy=y-(16.0+t*4.0);
++                        let dist=(dx*dx+dy*dy).sqrt();
++                        if dist<1.7+t*0.07 {
++                            paint(&mut rgba,[71.0,192.0,255.0],(0.86-dist*0.17).max(0.0));
++                        }
++                    }
++                }
++                let a=rgba[3];
++                aa+=a;
++                rr+=rgba[0]; gg+=rgba[1]; bb+=rgba[2];
++            }}
++            let m=1.0/(SAMPLES*SAMPLES) as f32;
++            // We rasterize on a transparent canvas; output BGRA with straight alpha.
++            let opacity=aa*m;
++            let denom=aa.max(0.0001);
++            let r=(rr/denom*255.0).clamp(0.0,255.0) as u8;
++            let g=(gg/denom*255.0).clamp(0.0,255.0) as u8;
++            let b=(bb/denom*255.0).clamp(0.0,255.0) as u8;
++            pixels.extend_from_slice(&[b,g,r,(opacity*255.0).clamp(0.0,255.0) as u8]);
++        }
++    }
++    // 32-bit Windows icon/cursor with AND transparency mask.
+     let mut data=Vec::new();
+     data.extend_from_slice(&40u32.to_le_bytes());
+     data.extend_from_slice(&(N as i32).to_le_bytes());
+@@ -110,7 +160,10 @@
+     for row in 0..N {
+         for byte in 0..8usize {
+             let mut mask=0u8;
+-            for bit in 0..8 { let col=byte*8+bit; if col < N && pixels[(row*N+col)*4+3] == 0 { mask |= 1 << (7-bit); } }
++            for bit in 0..8 {
++                let col=byte*8+bit;
++                if pixels[(row*N+col)*4+3]==0 {mask |= 1 << (7-bit);}
++            }
+             data.push(mask);
+         }
+     }
+@@ -118,9 +171,10 @@
+     file.extend_from_slice(&0u16.to_le_bytes());
+     file.extend_from_slice(&(if cursor {2u16} else {1u16}).to_le_bytes());
+     file.extend_from_slice(&1u16.to_le_bytes());
+-    file.extend_from_slice(&[48u8,48u8,0u8,0u8]);
+-    file.extend_from_slice(&(if cursor {23u16} else {1u16}).to_le_bytes());
+-    file.extend_from_slice(&(if cursor {10u16} else {32u16}).to_le_bytes());
++    file.extend_from_slice(&[N as u8,N as u8,0u8,0u8]);
++    // For CUR entries these fields are hotspot x/y; for ICO entries planes/depth.
++    file.extend_from_slice(&(if cursor {31u16} else {1u16}).to_le_bytes());
++    file.extend_from_slice(&(if cursor {13u16} else {32u16}).to_le_bytes());
+     file.extend_from_slice(&(data.len() as u32).to_le_bytes());
+     file.extend_from_slice(&22u32.to_le_bytes());
+     file.extend_from_slice(&data);
+@@ -128,10 +182,13 @@
+ }
+ 
+ unsafe extern "system" fn mouse_hook(code:i32,wp:WPARAM,lp:LPARAM) -> LRESULT {
+-    if code >= 0 && wp.0 as u32 == WM_RBUTTONDOWN && CATCH_RIGHT.load(Ordering::Relaxed) {
++    if code >= 0 && (wp.0 as u32 == WM_RBUTTONDOWN || wp.0 as u32 == WM_RBUTTONUP)
++        && CATCH_RIGHT.load(Ordering::Relaxed) {
+         let hwnd=CONTROLLER.load(Ordering::Relaxed);
+         if hwnd != 0 {
+-            let _=unsafe { PostMessageW(Some(HWND(hwnd as _)), POUR_MESSAGE, WPARAM(0), LPARAM(0)) };
++            if wp.0 as u32 == WM_RBUTTONDOWN {
++                let _=unsafe { PostMessageW(Some(HWND(hwnd as _)), POUR_MESSAGE, WPARAM(0), LPARAM(0)) };
++            }
+             return LRESULT(1);
+         }
+     }
+@@ -144,11 +201,11 @@
+ 
+ fn cursor(level:u8, tilted:bool) {
+     let _=std::fs::create_dir_all(storage());
+-    let path=storage().join(format!("glass-{}-{}.cur", level, if tilted {1} else {0}));
++    let path=storage().join(format!("glass-0511-{}-{}.cur", level, if tilted {1} else {0}));
+     if std::fs::write(&path, image_file(level, tilted, true)).is_err() { return; }
+     let pathw=wide(path.as_os_str());
+     unsafe {
+-        if let Ok(handle)=LoadImageW(None, PCWSTR(pathw.as_ptr()), IMAGE_CURSOR, 48,48,LR_LOADFROMFILE) {
++        if let Ok(handle)=LoadImageW(None, PCWSTR(pathw.as_ptr()), IMAGE_CURSOR, 64,64,LR_LOADFROMFILE) {
+             // SetSystemCursor assumes ownership; never DestroyCursor(handle) afterwards.
+             let _=SetSystemCursor(windows::Win32::UI::WindowsAndMessaging::HCURSOR(handle.0),OCR_NORMAL);
+         }
+@@ -193,7 +250,7 @@
+         unsafe {let _=GetCursorPos(&mut p);}
+         let amount=self.level;
+         self.level=0;
+-        self.tilted_ticks=1;
++        self.tilted_ticks=2;
+         cursor(0,true);
+         Some((p,amount))
+     }
