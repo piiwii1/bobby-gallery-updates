@@ -1,0 +1,361 @@
+name: SpookLink Android 2.22.0 - Reliable JPEG and fast import
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spooklink-android-2220.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40787810890
+          github-token: ${{ github.token }}
+          name: SpookLink-Android-2.5.0-unsigned
+          path: previous-apk
+      - name: Restore complete project and apply tested 2.6 UI changes
+        run: |
+          base64 -d spooklink2/build/android-2.1.0.zip.b64 > project.zip
+          unzip -q project.zip
+          python3 - <<'PY'
+          import base64,lzma,struct,zipfile,subprocess
+          from pathlib import Path
+          baseline=Path('spooklink2/android/v2.5.0/MainActivity.java').read_bytes()
+          Path('a.java').write_bytes(baseline)
+          data=Path('spooklink2/android/v2.6.0/update-java.diff.xz.b64').read_text().strip()
+          patch=lzma.decompress(base64.b64decode(data))
+          Path('update.diff').write_bytes(patch)
+          subprocess.run(['patch','-p0','-i','update.diff'],check=True)
+          patch2=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.7.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update27.diff').write_bytes(patch2)
+          subprocess.run(['patch','-p0','-i','update27.diff'],check=True)
+          # Arrange preset messages in two readable rows instead of four narrow chips.
+          java=Path('a.java').read_text()
+          java=java.replace('LinearLayout quick=horizontal();','LinearLayout quick=vertical(); LinearLayout topQuick=horizontal(),bottomQuick=horizontal();')
+          old="for(String phrase:phrases){\n            Button b=button(phrase,SOFT);b.setTextSize(10);b.setSingleLine(true);\n            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);\n            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(3);quick.addView(b,q);\n            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});\n        }\n        editor.addView(quick,lp(-1,35));"
+          updated="for(int k=0;k<phrases.length;k++){\n            final String phrase=phrases[k];\n            Button b=button(phrase,SOFT);b.setTextSize(12);b.setSingleLine(true);\n            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);\n            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(4);\n            (k<2?topQuick:bottomQuick).addView(b,q);\n            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});\n        }\n        quick.addView(topQuick,lp(-1,36));\n        quick.addView(bottomQuick,lp(-1,36));\n        editor.addView(quick,lp(-1,72));"
+          assert old in java
+          java=java.replace(old,updated)
+          Path('a.java').write_text(java)
+          # Apply the UI-only swipe changes on top of the exact 2.7 source.
+          patch28=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.8.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update28.diff').write_bytes(patch28)
+          subprocess.run(['patch','-p0','-i','update28.diff'],check=True)
+          patch29=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.9.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update29.diff').write_bytes(patch29)
+          subprocess.run(['patch','-p0','-i','update29.diff'],check=True)
+          patch210=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.10.0/update-java-actual.diff.xz.b64').read_text().strip()))
+          Path('update210.diff').write_bytes(patch210)
+          subprocess.run(['patch','-p0','-i','update210.diff'],check=True)
+          assert b'swipeEmoji' in Path('a.java').read_bytes()
+          source=Path('a.java').read_bytes()
+          assert b'tv_no_signal' in source and b'tv_broken' in source and b'v2.10.0' in source
+          assert b'EmojiSwipeFrame' in source and b'swipeEmoji' in source and b'duration_seconds' in source
+          assert b'renderMessageBitmap' in source and b'message_png' in source
+          assert b'makeEmojiPng' in source and b'message_style' in source and b'buildEmojis' in source
+          Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').write_bytes(source)
+          with zipfile.ZipFile('previous-apk/app-release-unsigned.apk') as archive:
+              matches=[]
+              for name in archive.namelist():
+                  if not name.endswith('.png'): continue
+                  blob=archive.read(name)
+                  if struct.unpack('>II',blob[16:24])==(96,96):matches.append(blob)
+              assert len(matches)==1, 'Previous launcher icon not found'
+          Path('android/app/src/main/res/drawable-nodpi/ic_spooklink.png').write_bytes(matches[0])
+          manifest=Path('android/app/src/main/AndroidManifest.xml')
+          m=manifest.read_text()
+          manifest.write_text(m.replace('android:label="SpookLink"','android:label="SpookLink" android:icon="@drawable/ic_spooklink"'))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 9' in g
+          gradle.write_text(g.replace('versionCode 9','versionCode 19').replace("versionName '2.1.0'","versionName '2.10.0'"))
+          print('SpookLink 2.10.0 Java and icon restored:',len(source))
+          PY
+      - name: Install better TV icons without changing the network protocol
+        run: |
+          cp spooklink2/android/v2.11.0/TVIcons.java android/app/src/main/java/ch/piiwii/spooklink/TVIcons.java
+          python3 - <<'PY'
+          from pathlib import Path
+          java=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=java.read_text()
+          old='String[] names={"⏻  Allumer","⏻  Éteindre","▦  Parasites","▥  Aucun signal","⚡  Fissuré","💥  Cassé"};'
+          new='String[] names={"Allumer","Éteindre","Parasites","Aucun signal","Fissuré","Cassé"};'
+          assert old in s
+          s=s.replace(old,new)
+          before='TextView label=text(names[i],15,WHITE,true);label.setGravity(Gravity.CENTER);tile.addView(label,lp(-1,31));'
+          after='ImageView icon=new ImageView(this);icon.setImageBitmap(TVIcons.render(kind));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);tile.addView(icon,lp(94,53));TextView label=text(names[i],13,WHITE,true);label.setGravity(Gravity.CENTER);tile.addView(label,lp(-1,25));'
+          assert before in s
+          s=s.replace(before,after)
+          s=s.replace('TÉLÉCOMMANDE  ·  v2.10.0','TÉLÉCOMMANDE  ·  v2.11.0')
+          java.write_text(s)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 19' in g
+          gradle.write_text(g.replace('versionCode 19','versionCode 20').replace("versionName '2.10.0'","versionName '2.11.0'"))
+          assert 'TVIcons.render(kind)' in java.read_text()
+          PY
+      - name: Apply 2.12 Wi-Fi reconnect and priority STOP updates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=p.read_text()
+          changes=[
+            ('final ExecutorService io=Executors.newSingleThreadExecutor();','final ExecutorService io=Executors.newSingleThreadExecutor();\n    private final ExecutorService priorityIo=Executors.newSingleThreadExecutor();'),
+            ('private String deviceId,host="",token="",selection="",page="effects";','private String deviceId,selection="",page="effects";\n    private volatile String host="",token="";'),
+            ('private boolean connected=false;','private volatile boolean connected=false;'),
+            ('io.shutdownNow();super.onDestroy();','io.shutdownNow();priorityIo.shutdownNow();super.onDestroy();'),
+            ('TÉLÉCOMMANDE  ·  v2.11.0','TÉLÉCOMMANDE  ·  v2.12.0'),
+            ('JSONObject ack=post(address,"/v2/connect",payload,"");String t=ack.getString("token");','String knownToken=prefs.getString("token_"+address,"");JSONObject ack=post(address,"/v2/connect",payload,knownToken);String t=ack.getString("token");'),
+            ('    private void send(String kind,String value){if(!connected)','    private void fastStop() {\n        final String server=host,secret=token;\n        if(server.isEmpty()||secret.isEmpty()){status("Aucun PC connecté pour STOP.",false);return;}\n        priorityIo.execute(()->{try{JSONObject packet=new JSONObject();packet.put("kind","stop");packet.put("count",0);post(server,"/v2/send",packet,secret);status("",true);}catch(Exception e){status("STOP indisponible : "+e.getMessage(),false);}});\n    }\n    private void send(String kind,String value){if(kind.equals("stop")){fastStop();return;}if(!connected)'),
+            ('}catch(Exception e){showConnection(false,"");status("Envoi impossible : "+e.getMessage(),false);doDiscover();}});','}catch(Exception e){status("Envoi impossible : "+e.getMessage(),false);}});')
+          ]
+          for old,new in changes:
+              assert old in s, 'Missing source anchor: '+old[:60]
+              s=s.replace(old,new,1)
+          p.write_text(s)
+          g=Path('android/app/build.gradle')
+          v=g.read_text()
+          assert 'versionCode 20' in v and "versionName '2.11.0'" in v
+          g.write_text(v.replace('versionCode 20','versionCode 21').replace("versionName '2.11.0'","versionName '2.12.0'"))
+          PY
+      - name: Apply tested heartbeat hysteresis and final Android version
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=p.read_text()
+          before='private volatile boolean connected=false;'
+          assert before in s
+          s=s.replace(before,before+chr(10)+'    private int heartbeatFailures=0;',1)
+          old='showConnection(true,ack.optString("name",address));status("",true);'
+          assert old in s
+          s=s.replace(old,'heartbeatFailures=0;'+old,1)
+          old='private void checkStatus(){final String h=host,t=token;if(h.isEmpty()||t.isEmpty()){discover();return;}io.execute(()->{try{get(h,"/v2/status",t);}catch(Exception e){showConnection(false,"");status("PC perdu · reconnexion automatique…",false);doDiscover();}});}'
+          replacement='private void checkStatus(){final String h=host,t=token;if(h.isEmpty()||t.isEmpty()){discover();return;}io.execute(()->{try{get(h,"/v2/status",t);heartbeatFailures=0;}catch(Exception e){heartbeatFailures++;if(heartbeatFailures<2){status("Wi-Fi momentanément lent, nouvelle vérification…",false);return;}heartbeatFailures=0;showConnection(false,"");status("PC perdu · reconnexion automatique…",false);doDiscover();}});}'
+          assert old in s
+          p.write_text(s.replace(old,replacement,1))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 21' in g
+          gradle.write_text(g.replace('versionCode 21','versionCode 22').replace("versionName '2.12.0'","versionName '2.15.0'"))
+          print('Final Android 2.15 source:',p.stat().st_size)
+          PY
+      - name: Add two fullscreen TV effects and vector menu icons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          folder=Path('android/app/src/main/java/ch/piiwii/spooklink')
+          import re
+          folder=Path('android/app/src/main/java/ch/piiwii/spooklink')
+          current=folder/'MainActivity.java'
+          Path('a.java').write_bytes(current.read_bytes())
+          patch=lzma.decompress(base64.b64decode('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')).decode()
+          chunks=re.split(r'(?=^@@ )',patch,flags=re.M)
+          # Only the navigation hunks: replace the TV grid as one atomic method below.
+          keep=[c for c in chunks[1:] if re.match(r'@@ -(\d+)',c) and int(re.match(r'@@ -(\d+)',c).group(1))<400]
+          assert keep, 'No navigation patch'
+          Path('nav216.diff').write_text(chunks[0]+''.join(keep))
+          subprocess.run(['patch','-p0','-i','nav216.diff'],check=True)
+          s=Path('a.java').read_text()
+          beginning=s.index('    private void buildTV(){')
+          ending=s.index('    private void buildMessages(){',beginning)
+          method=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.16.0/buildTV.xz.b64').read_text().strip())).decode()
+          s=s[:beginning]+method+s[ending:]
+          s=s.replace('v2.12.0','v2.16.0')
+          assert 'NavIcons.render(key' in s and 'tv_glitch' in s and 'tv_bsod' in s
+          current.write_text(s)
+          for dest,blob in [('TVIcons.java','TVIcons.xz.b64'),('NavIcons.java','NavIcons.xz.b64')]:
+              data=Path('spooklink2/android/v2.16.0/'+blob).read_text().strip()
+              (folder/dest).write_bytes(lzma.decompress(base64.b64decode(data)))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 22' in g and "versionName '2.15.0'" in g
+          gradle.write_text(g.replace('versionCode 22','versionCode 23').replace("versionName '2.15.0'","versionName '2.16.0'"))
+          assert 'tv_glitch' in (folder/'MainActivity.java').read_text()
+          assert 'NavIcons.render' in (folder/'MainActivity.java').read_text()
+          print('Android 2.16.0 ready, new effects and navigation verified')
+          PY
+      - name: Add Android monitor selection and move STOP to center
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          java=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          before=java.read_bytes()
+          Path('a.java').write_bytes(before)
+          patch=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.17.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update217.diff').write_bytes(patch)
+          subprocess.run(['patch','-p0','-i','update217.diff'],check=True)
+          java.write_bytes(Path('a.java').read_bytes())
+          # Avoid shadowing the outer TextView named h in buildSettings.
+          source=java.read_text()
+          assert 'final String selected=monitorIds.get(idx),h=host,t=token;' in source
+          source=source.replace('final String selected=monitorIds.get(idx),h=host,t=token;',
+                                'final String selected=monitorIds.get(idx),screenHost=host,t=token;')
+          source=source.replace('JSONObject answer=post(h,"/v2/displays",request,t);',
+                                'JSONObject answer=post(screenHost,"/v2/displays",request,t);')
+          java.write_text(source)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 23' in g and "versionName '2.16.0'" in g
+          gradle.write_text(g.replace('versionCode 23','versionCode 24').replace("versionName '2.16.0'","versionName '2.17.0'"))
+          source=java.read_text()
+          assert 'addTab("STOP","stop");addTab("Messages","messages");addTab("TV","tv");' in source
+          assert 'monitorSelector' in source and '/v2/displays' in source and '__ALL_DISPLAYS__' in source
+          assert 'v2.17.0' in source
+          print('Android 2.17 patch OK; source',len(source))
+          PY
+      - name: Apply Android 2.18 screen switches and readable dark spinner
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          encoded=Path('spooklink2/android/v2.18.0/update-java.diff.xz.b64').read_text().strip()
+          Path('update218.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','-p0','-i','update218.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 24' in g and "versionName '2.17.0'" in g
+          gradle.write_text(g.replace('versionCode 24','versionCode 25').replace("versionName '2.17.0'","versionName '2.18.0'"))
+          source=src.read_text()
+          assert 'setMonitorEnabled' in source and 'selected_devices' in source and 'readableSpinnerAdapter' in source
+          assert 'monitorSelector' not in source and 'v2.18.0' in source
+          print('SpookLink 2.18.0 monitor toggle APK sources ready:',len(source))
+          PY
+      - name: Apply user image import and optional audio settings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          encoded=Path('spooklink2/android/v2.19.0/update-java.diff.xz.b64').read_text().strip()
+          import re
+          sourcePatch=lzma.decompress(base64.b64decode(encoded)).decode()
+          chunks=re.split(r'(?=^@@ )',sourcePatch,flags=re.M)
+          assert len(chunks)==9, 'Expected 8 patch hunks, got '+str(len(chunks)-1)
+          # Apply all exact hunks except the last, whose context differs
+          # slightly due to the cumulative 2.17/2.18 build.
+          Path('update219.diff').write_text(''.join(chunks[:8]))
+          subprocess.run(['patch','-p0','-i','update219.diff'],check=True)
+          java=Path('a.java').read_text()
+          assert 'final String renderedMessage=messagePng;' in java
+          java=java.replace('final String renderedMessage=messagePng;',
+                 'final String renderedMessage=messagePng;\\n        final boolean playSound=soundEnabled;\\n        final int playVolume=soundVolume;',1)
+          assert 'packet.put("duration_seconds",tvSeconds);' in java
+          java=java.replace('packet.put("duration_seconds",tvSeconds);',
+                 'packet.put("duration_seconds",tvSeconds);packet.put("sound_enabled",playSound);packet.put("sound_volume",playVolume);if(kind.equals("custom")){packet.put("asset_id",value);packet.put("text","");}',1)
+          added=''.join(line[1:] for line in chunks[8].splitlines(keepends=True) if line.startswith('+') and not line.startswith('+++'))
+          start=added.index('    private void buildCustomImages(')
+          methods=added[start:]
+          anchor='    private String makeEmojiPng(String value)throws Exception{'
+          assert anchor in java and 'private void buildCustomImages(' not in java
+          java=java.replace(anchor,methods+anchor,1)
+          # Decode a literal linebreak in the generated Java source, not a backslash-n.
+          java=java.replace('messagePng;\\n        final boolean','messagePng;'+chr(10)+'        final boolean')
+          java=java.replace('playSound;\\n        final int','playSound;'+chr(10)+'        final int')
+          # Keep Java source free of literal backslash-n introduced by YAML escaping.
+          java=java.replace(chr(92)+'n        final int playVolume=',chr(10)+'        final int playVolume=')
+          src.write_text(java)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 25' in g and "versionName '2.18.0'" in g
+          gradle.write_text(g.replace('versionCode 25','versionCode 26').replace("versionName '2.18.0'","versionName '2.19.0'"))
+          source=src.read_text()
+          assert '/v2/upload' in source and 'CHOOSE_IMAGE' in source and 'sound_enabled' in source
+          assert 'sendCustomImage' in source and 'v2.19.0' in source
+          print('Source Android 2.19.0 import and audio OK:',len(source))
+          PY
+      - name: Support normal size phone photos, HEIC WebP and larger GIFs automatically
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(p.read_bytes())
+          encoded=Path('spooklink2/android/v2.20.0/update-java.diff.xz.b64').read_text().strip()
+          Path('upgrade220.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','--fuzz=2','-p0','-i','upgrade220.diff'],check=True)
+          p.write_bytes(Path('a.java').read_bytes())
+          gfile=Path('android/app/build.gradle')
+          g=gfile.read_text()
+          assert 'versionCode 26' in g and "versionName '2.19.0'" in g
+          gfile.write_text(g.replace('versionCode 26','versionCode 27').replace("versionName '2.19.0'","versionName '2.20.0'"))
+          source=p.read_text()
+          assert 'prepareUserImage' in source and 'ImageDecoder.decodeBitmap' in source
+          assert 'MAX_GIF_UPLOAD=20*1024*1024' in source and 'v2.20.0' in source
+          assert 'addTab("STOP","stop")' in source and 'setMonitorEnabled' in source
+          PY
+      - name: Fix JPEG uploads, remove saved images and update app version
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          path=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(path.read_bytes())
+          encoded=Path('spooklink2/android/v2.21.0/update-java.diff.xz.b64').read_text().strip()
+          Path('update221.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','-p0','-i','update221.diff'],check=True)
+          path.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 27' in g and "versionName '2.20.0'" in g
+          gradle.write_text(g.replace('versionCode 27','versionCode 28').replace("versionName '2.20.0'","versionName '2.21.0'"))
+          source=path.read_text()
+          assert 'jpegInput' in source and 'removeCustomImage' in source and '/v2/assets/delete' in source
+          assert 'v2.21.0' in source and 'addTab("STOP","stop")' in source
+          print('Android 2.21 complete source',len(source))
+          PY
+      - name: Optimize phone photos and send display command without queuing
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          data=Path('spooklink2/android/v2.22.0/update-java.diff.xz.b64').read_text().strip()
+          Path('upgrade222.diff').write_bytes(lzma.decompress(base64.b64decode(data)))
+          subprocess.run(['patch','-p0','-i','upgrade222.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 28' in g and "versionName '2.21.0'" in g
+          gradle.write_text(g.replace('versionCode 28','versionCode 29').replace("versionName '2.21.0'","versionName '2.22.0'"))
+          j=src.read_text()
+          assert 'MAX_EDGE=1600' in j and 'post(server,"/v2/send",packet,secret);' in j
+          assert 'v2.22.0' in j and '/v2/assets/delete' in j
+          print('Source version 2.22.0',len(j))
+          PY
+      - name: Compile release APK
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpookLink-Android-2.22.0-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 30
+
+# Rebased from exact 2.9.0 Android source.
