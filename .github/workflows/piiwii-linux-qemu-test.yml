@@ -1,0 +1,68 @@
+name: PiiWii Turbo Linux - Virtual BIOS and UEFI boot check
+on:
+  push:
+    branches: [piiwii-linux-qemu-test-20261029]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  boot-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Install QEMU and screenshot utilities
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends qemu-system-x86 ovmf socat imagemagick
+      - name: Download ISO built by successful job 40904301035
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p input screenshots
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-0.9.0-TEST-ISO --dir input
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-compilation-report --dir input/report
+          ISO=input/PiiWii-Turbo-Linux-0.9.0-TEST.iso
+          expected="$(awk '{print $1}' input/report/dist/PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256)"
+          printf '%s  %s\n' "$expected" "$ISO" | sha256sum -c -
+          stat -c '%n %s bytes' "$ISO"
+      - name: Boot in BIOS virtual machine and capture screen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          qemu-system-x86_64 -machine pc -accel tcg,thread=multi -smp 2 -m 3072 -vga std \
+            -cdrom input/PiiWii-Turbo-Linux-0.9.0-TEST.iso -boot order=d \
+            -display none -monitor unix:/tmp/piiwii-bios.sock,server,nowait \
+            -pidfile /tmp/piiwii-bios.pid -daemonize
+          sleep 105
+          printf 'info status\nscreendump screenshots/bios.ppm\n' | socat - UNIX-CONNECT:/tmp/piiwii-bios.sock
+          convert screenshots/bios.ppm screenshots/bios.png
+          file screenshots/bios.png
+          kill "$(cat /tmp/piiwii-bios.pid)" || true
+      - name: Boot in UEFI virtual machine and capture screen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          CODE=/usr/share/OVMF/OVMF_CODE_4M.fd
+          VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
+          test -f "$CODE" && test -f "$VARS"
+          cp "$VARS" /tmp/piiwii-uefi-vars.fd
+          qemu-system-x86_64 -machine q35 -accel tcg,thread=multi -smp 2 -m 3072 -vga std \
+            -drive if=pflash,format=raw,readonly=on,file="$CODE" \
+            -drive if=pflash,format=raw,file=/tmp/piiwii-uefi-vars.fd \
+            -cdrom input/PiiWii-Turbo-Linux-0.9.0-TEST.iso -boot order=d \
+            -display none -monitor unix:/tmp/piiwii-uefi.sock,server,nowait \
+            -pidfile /tmp/piiwii-uefi.pid -daemonize
+          sleep 105
+          printf 'info status\nscreendump screenshots/uefi.ppm\n' | socat - UNIX-CONNECT:/tmp/piiwii-uefi.sock
+          convert screenshots/uefi.ppm screenshots/uefi.png
+          file screenshots/uefi.png
+          kill "$(cat /tmp/piiwii-uefi.pid)" || true
+      - name: Upload virtual boot screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-BIOS-UEFI-boot-screenshots
+          path: screenshots/*.png
+          retention-days: 3
+          if-no-files-found: warn
