@@ -61,9 +61,10 @@ jobs:
           patch29=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.9.0/update-java.diff.xz.b64').read_text().strip()))
           Path('update29.diff').write_bytes(patch29)
           subprocess.run(['patch','-p0','-i','update29.diff'],check=True)
-          patch210=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.10.0/update-java.diff.xz.b64').read_text().strip()))
+          patch210=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.10.0/update-java-actual.diff.xz.b64').read_text().strip()))
           Path('update210.diff').write_bytes(patch210)
           subprocess.run(['patch','-p0','-i','update210.diff'],check=True)
+          assert b'swipeEmoji' in Path('a.java').read_bytes()
           source=Path('a.java').read_bytes()
           assert b'tv_no_signal' in source and b'tv_broken' in source and b'v2.10.0' in source
           assert b'EmojiSwipeFrame' in source and b'swipeEmoji' in source and b'duration_seconds' in source
@@ -96,3 +97,5 @@ jobs:
           path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
           retention-days: 30
+
+# Rebased from exact 2.9.0 Android source.
