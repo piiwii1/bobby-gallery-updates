@@ -1,0 +1,27 @@
+name: PiiWii ISO - Read original SHA256
+on:
+  push:
+    branches: [piiwii-linux-iso-chunks-20261029]
+    paths: [.github/workflows/piiwii-iso-sha-report.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  checksum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Read build report and show ISO checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir report
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-compilation-report --dir report
+          find report -type f -printf '%p (%s bytes)\n'
+          SHA_FILE="$(find report -type f -name 'PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256' -print -quit)"
+          test -s "$SHA_FILE"
+          echo "ORIGINAL_ISO_SHA256_RECORD_BEGIN"
+          cat "$SHA_FILE"
+          echo "ORIGINAL_ISO_SHA256_RECORD_END"
