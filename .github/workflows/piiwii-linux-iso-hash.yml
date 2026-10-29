@@ -1,0 +1,18 @@
+name: PiiWii Turbo Linux - Print verified ISO SHA256
+on:
+  push:
+    branches: [piiwii-linux-iso-hash-20261029]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  checksum:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Print checksum from successful ISO build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-compilation-report --dir report
+          cat report/dist/PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256
