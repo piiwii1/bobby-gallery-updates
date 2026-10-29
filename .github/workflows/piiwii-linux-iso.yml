@@ -1,4 +1,4 @@
-name: PiiWii Linux - runner verification
+name: PiiWii Turbo Linux - ISO build
 on:
   push:
     branches: [piiwii-linux-iso-20261029]
@@ -8,11 +8,35 @@ permissions:
 jobs:
   iso:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 180
     steps:
-      - name: Verify runner and disk
+      - uses: actions/checkout@v4
+      - name: Runner resources
         run: |
-          echo "PiiWii Linux runner is running"
           df -h /
-          uname -a
-          curl -fILsS --max-time 30 https://pub.linuxmint.io/stable/22.3/sha256sum.txt
+          free -h
+          nproc
+      - name: Build real PiiWii ISO from verified Mint
+        run: |
+          set -o pipefail
+          bash piiwii-linux/construct-iso.sh 2>&1 | tee build.log
+      - name: Save logs and checksums
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-compilation-report
+          path: |
+            build.log
+            dist/*report*
+            dist/*.sha256
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Save ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-0.9.0-TEST-ISO
+          path: dist/*.iso
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
