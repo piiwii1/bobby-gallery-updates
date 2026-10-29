@@ -1,0 +1,138 @@
+name: Cartes Organizer Android Native 0.3.0 — Offline cards and original navigation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cartes-organizer-native-030.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Reconstruct native Android app 0.2.0
+        run: |
+          set -euo pipefail
+          base64 -d cartes-organizer-native-020/build-project.zip.b64 > /tmp/co-native.zip
+          mkdir -p android-native
+          unzip -q /tmp/co-native.zip -d android-native
+          test -f android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+      - name: Configure site and native WordPress authorization
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('android-native')
+          p=r/'app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java'
+          s=p.read_text()
+          def replace(a,b):
+           global s
+           assert s.count(a)==1,(a[:70],s.count(a))
+           s=s.replace(a,b,1)
+          replace('site=pref.getString("site",""); username=pref.getString("user","");','site="https://piiwii.ch"; username=pref.getString("user","");')
+          replace('if(site.isEmpty()||username.isEmpty()||password.isEmpty())welcome();','if(username.isEmpty()||password.isEmpty())launchConsent();')
+          replace('TextView notice=text("Connexion sans identifiant à saisir\\n\\nSur ton téléphone, ouvre ton Cartes Organizer dans le navigateur, puis Réglages → Connecter l’application Android.\\n\\nAprès l’association, toutes les prochaines ouvertures se connecteront automatiquement.",14,FG);','TextView notice=text("Connexion à piiwii.ch\\n\\nLa première autorisation de données privées peut être demandée par WordPress. Aucun identifiant ni mot de passe à saisir dans cette application. Ensuite, les ouvertures sont automatiques.",14,FG);')
+          replace('content.addView(text("Pas de WebView · Données privées · Connexion chiffrée",12,MUTED),lp(-1,65));','content.addView(button("Autoriser Cartes Organizer",()->launchConsent()),lp(-1,52));\n        content.addView(text("Application native · Données privées · HTTPS",12,MUTED),lp(-1,57));')
+          replace('if("setup".equals(action)){','if("wpauth".equals(action)){consumeConsent(uri);return true;}\n        if("reject".equals(action)){welcome();return true;}\n        if("setup".equals(action)){')
+          method=String = '''    private void launchConsent(){
+                  welcome();
+                  try{
+                      byte[] bytes=new byte[24];new SecureRandom().nextBytes(bytes);
+                      String id=android.util.Base64.encodeToString(bytes,android.util.Base64.URL_SAFE|android.util.Base64.NO_PADDING|android.util.Base64.NO_WRAP);
+                      getPreferences(MODE_PRIVATE).edit().putString("wp_state",storeSecret(id)).apply();
+                      Uri authorize=Uri.parse("https://piiwii.ch/wp-admin/authorize-application.php").buildUpon()
+                          .appendQueryParameter("app_name","Cartes Organizer Android — PiiWii")
+                          .appendQueryParameter("app_id","f347b234-f30d-44c9-acac-9bd496e0a7cb")
+                          .appendQueryParameter("success_url","cartesorganizer://wpauth?state="+Uri.encode(id))
+                          .appendQueryParameter("reject_url","cartesorganizer://reject?state="+Uri.encode(id)).build();
+                      Intent browser=new Intent(Intent.ACTION_VIEW,authorize);
+                      browser.addCategory(Intent.CATEGORY_BROWSABLE);
+                      startActivity(browser);
+                  }catch(Exception e){error("Autorisation WordPress impossible : "+e.getMessage());}
+              }
+              private void consumeConsent(Uri uri){
+                  String expected="";
+                  try{expected=readSecret(getPreferences(MODE_PRIVATE).getString("wp_state",""));}catch(Exception ignored){}
+                  String supplied=uri.getQueryParameter("state");
+                  if(expected.isEmpty()||supplied==null||!MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),supplied.getBytes(StandardCharsets.UTF_8))){
+                      welcome();error("Réponse WordPress non reconnue.");return;
+                  }
+                  getPreferences(MODE_PRIVATE).edit().remove("wp_state").apply();
+                  String host=uri.getQueryParameter("site_url");
+                  String u=uri.getQueryParameter("user_login"),pass=uri.getQueryParameter("password");
+                  if(host==null||!"https://piiwii.ch".equals(host.replaceAll("/+$",""))||u==null||u.isEmpty()||pass==null||pass.isEmpty()){
+                      welcome();error("WordPress n’a pas autorisé Cartes Organizer.");return;
+                  }
+                  site="https://piiwii.ch";username=u;password=pass;
+                  try{
+                      getPreferences(MODE_PRIVATE).edit().putString("site",site).putString("user",u).putString("auth",storeSecret(pass)).apply();
+                      page="overview";loading("Synchronisation automatique…");refresh();
+                  }catch(Exception e){username="";password="";welcome();error("Impossible de sécuriser la connexion.");}
+              }
+          '''
+          replace('    private void beginPairing(String nonce){',method+'    private void beginPairing(String nonce){')
+          p.write_text(s)
+          mp=r/'app/src/main/AndroidManifest.xml'
+          m=mp.read_text()
+          assert m.count('  </activity>')==1
+          intent='   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cartesorganizer" android:host="wpauth"/></intent-filter>\n   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="cartesorganizer" android:host="reject"/></intent-filter>\n'
+          mp.write_text(m.replace('  </activity>',intent+'  </activity>',1))
+          g=r/'app/build.gradle'; v=g.read_text()
+          assert 'versionCode 3' in v and "versionName '0.2.0'" in v
+          g.write_text(v.replace('versionCode 3','versionCode 4').replace("versionName '0.2.0'","versionName '0.2.1'"))
+          print('Native 0.2.1 WordPress core authorization integrated',len(s))
+          PY
+      - name: Apply Cartes Organizer 0.3.0 source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,zlib
+          from pathlib import Path
+          blob=Path('cartes-organizer-native-030/patch.zlib.b64').read_text().strip()
+          Path('/tmp/cartes-030.patch').write_bytes(zlib.decompress(base64.b64decode(blob)))
+          PY
+          patch -p1 -d android-native < /tmp/cartes-030.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          g=Path('android-native/app/build.gradle')
+          t=g.read_text()
+          assert 'versionCode 4' in t and "versionName '0.2.1'" in t
+          g.write_text(t.replace('versionCode 4','versionCode 5').replace("versionName '0.2.1'","versionName '0.3.0'"))
+          j=Path('android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java').read_text()
+          assert 'LOCAL_CACHE="offline_manifest_030"' in j
+          assert 'renderScreen()' in j
+          PY
+      - name: Compile signed native APK
+        run: gradle --no-daemon -p android-native :app:assembleDebug
+      - name: Package APK and sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android-native/app/build/outputs/apk/debug/app-debug.apk dist/Cartes-Organizer-Android-0.3.0.apk
+          (cd android-native && zip -qr ../dist/Cartes-Organizer-Android-0.3.0-sources.zip . -x '*/build/*' '.gradle/*')
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/Cartes-Organizer-Android-0.3.0.apk > dist/SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/Cartes-Organizer-Android-0.3.0.apk | head -5 > dist/APK-INFO.txt
+          sha256sum dist/Cartes-Organizer-Android-0.3.0.apk > dist/SHA256.txt
+          printf 'versionName=0.3.0\nversionCode=5\npluginVersion=0.3.8\nwebview=no\nwordpressCoreAuthorization=yes\nofflineSupport=yes\nsite=https://piiwii.ch\n' > dist/BUILD-INFO.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cartes-Organizer-Android-0.3.0
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
