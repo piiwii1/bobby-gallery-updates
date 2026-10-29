@@ -1,0 +1,53 @@
+name: PiiWii Turbo Linux 1.1 - SoundRent Live and NumLock
+on:
+  push:
+    branches: [piiwii-linux-1-1-20261029]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify builder script and embedded Python
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n piiwii-linux/construct-v1.1.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('piiwii-linux/construct-v1.1.sh').read_text()
+          part=text.split("python3 - \"$ROOT\" <<'PY'\n",1)[1].split("\nPY\n",1)[0]
+          compile(part,'piiwii-python-rootfs', 'exec')
+          for key in ('piiwii-live-soundrent', 'piiwii-firstboot-soundrent', 'numlockx', 'PiiWii-Turbo-Linux-1.1.0-TEST.iso'):
+              assert key in text, key
+          print('Constructeur et personnalisation : syntaxe valide')
+          PY
+          df -h /
+      - name: Compile Linux Mint customized ISO
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo bash piiwii-linux/construct-v1.1.sh 2>&1 | tee build-v1.1.log
+      - name: Upload logs and SHA256
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-1.1.0-TEST-build-report
+          path: |
+            build-v1.1.log
+            dist/*.txt
+            dist/*.sha256
+          retention-days: 5
+          if-no-files-found: warn
+      - name: Upload ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-1.1.0-TEST-ISO
+          path: dist/PiiWii-Turbo-Linux-1.1.0-TEST.iso
+          compression-level: 0
+          retention-days: 5
+          if-no-files-found: error
