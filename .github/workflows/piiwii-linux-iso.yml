@@ -19,7 +19,7 @@ jobs:
       - name: Build real PiiWii ISO from verified Mint
         run: |
           set -o pipefail
-          bash piiwii-linux/construct-iso.sh 2>&1 | tee build.log
+          sudo bash piiwii-linux/construct-iso.sh 2>&1 | tee build.log
       - name: Save logs and checksums
         if: always()
         uses: actions/upload-artifact@v4
