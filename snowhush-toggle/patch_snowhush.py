@@ -64,6 +64,8 @@ edit("windows/src/snow.rs",[
                     log!("snow switch: {}", if on { "ON" } else { "OFF" });
                 },'''),
     ('        if active {\n', '        if active && settings.enabled {\n'),
+    ('        let due = screens.iter().map(|screen| screen.next_due).min().filter(|_| active);\n',
+     '        let due = screens.iter().map(|screen| screen.next_due).min().filter(|_| active && settings.enabled);\n'),
     ('        screen.simulation.walls = walls(&screen.monitor, &displays);\n',
      '        screen.simulation.walls = walls(&screen.monitor, &displays);\n        screen.set_enabled(settings.enabled);\n'),
 ])
