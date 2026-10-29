@@ -43,7 +43,7 @@ jobs:
           patch=lzma.decompress(base64.b64decode(data))
           Path('update.diff').write_bytes(patch)
           subprocess.run(['patch','-p0','-i','update.diff'],check=True)
-          patch2=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.8.0/update-java.diff.xz.b64').read_text().strip()))
+          patch2=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.7.0/update-java.diff.xz.b64').read_text().strip()))
           Path('update27.diff').write_bytes(patch2)
           subprocess.run(['patch','-p0','-i','update27.diff'],check=True)
           # Arrange preset messages in two readable rows instead of four narrow chips.
