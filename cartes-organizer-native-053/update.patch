@@ -1,0 +1,73 @@
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -6,8 +6,8 @@
+         applicationId 'ch.piiwii.cartesorganizer'
+         minSdk 29
+         targetSdk 35
+-        versionCode 20
+-        versionName '0.4.12'
++        versionCode 21
++        versionName '0.4.13'
+     }
+     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ }
+--- a/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
++++ b/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+@@ -414,7 +414,7 @@
+         addMenuItem(panel,"◷   Historique","history",dialog);
+         addMenuItem(panel,"▤   Corbeille","trash",dialog);
+         addMenuItem(panel,"⚙   Réglages","settings",dialog);
+-        panel.addView(space(25));panel.addView(text("piiwii.ch  ·  Android 0.4.10",11,MUTED));
++        panel.addView(space(25));panel.addView(text("piiwii.ch  ·  Android 0.4.13",11,MUTED));
+         ScrollView scroll=new ScrollView(this);scroll.addView(panel);dialog.setContentView(scroll);
+         dialog.show();Window window=dialog.getWindow();if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.setLayout(dp(302),-1);window.setGravity(Gravity.TOP|Gravity.LEFT);window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.48f);}
+     }
+@@ -563,7 +563,7 @@
+         }root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
+     }
+     private void renderSettings(){
+-        startScreen();toolbar("Réglages");TextView t=text("Cartes Organizer · Android 0.4.10\n\nServeur : https://piiwii.ch\nStatut : "+(disconnected?"Hors connexion":"Synchronisation privée active")+"\n\nToutes les opérations sont enregistrées sur WordPress. Les données déjà synchronisées restent consultables hors ligne.",14,FG);
++        startScreen();toolbar("Réglages");TextView t=text("Cartes Organizer · Android 0.4.13\n\nServeur : https://piiwii.ch\nStatut : "+(disconnected?"Hors connexion":"Synchronisation privée active")+"\n\nToutes les opérations sont enregistrées sur WordPress. Les données déjà synchronisées restent consultables hors ligne.",14,FG);
+         t.setPadding(dp(18),dp(20),dp(16),dp(25));t.setLineSpacing(dp(5),1);root.addView(t,lp(-1,-2));
+         root.addView(button("↻  Synchroniser",()->refresh()),lp(-1,50));
+     }
+@@ -996,8 +996,11 @@
+                 JSONObject details=result.optJSONObject("data");
+                 throw new IOException(details==null?"WordPress a refusé l’attribution.":details.optString("message","WordPress a refusé l’attribution."));
+             }
+-            // Share before refreshing the view, so the incoming sync cannot interrupt the Android share flow.
++            // WordPress confirmed the attribution. Refresh immediately so the
++            // card leaves pending and the friend's slot becomes occupied.
++            toast("Carte attribuée à la case "+slot+". Ouverture du partage WhatsApp…");
+             shareToWhatsApp(card,null,friendId);
++            refresh();
+         });
+     }
+     private String shareImageUrl(JSONObject card,JSONObject copy){
+@@ -1109,10 +1112,15 @@
+     private void showActions(JSONObject c,JSONObject copy,String role){
+         final int id=c.optInt("id");
+         ArrayList<String> names=new ArrayList<>();ArrayList<Runnable> commands=new ArrayList<>();
+-        if("pending".equals(role)){
+-            names.add("Attribuer et préparer WhatsApp");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->assignAndShare(c,f,s))));
+-            names.add("Partager la carte sans la déplacer");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->shareToWhatsApp(c,null,f))));
+-            names.add("Attribuer sans partager");commands.add(()->pickSlot(-1,(f,s)->operation("assign","card_id",id,"friend_id",f,"slot_no",s)));
++        if("pending".equals(role) && c.optBoolean("has_frame") &&
++           ("pending".equals(c.optString("stage")) || "assigned".equals(c.optString("stage")))){
++            // Attribution WordPress : ne pas la bloquer si WhatsApp ou le carnet
++            // d'adresses n'est pas disponible. La même bordure peut être copiée
++            // pour plusieurs amis, dans des cases distinctes.
++            names.add("Attribuer à un ami");commands.add(()->pickSlot(-1,(f,s)->operation(
++                "assign","card_id",id,"friend_id",f,"slot_no",s)));
++            names.add("Attribuer et partager sur WhatsApp");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->assignAndShare(c,f,s))));
++            names.add("Partager sans déplacer");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->shareToWhatsApp(c,null,f))));
+         }
+         if("original".equals(role)||"pending".equals(role)){names.add(c.optBoolean("has_frame")?"Modifier la bordure":"Créer une bordure");commands.add(()->frameDialog(c));}
+@@ -1176,7 +1184,7 @@
+         job(()->http(base()+"mobile/action","POST",payload,"application/x-www-form-urlencoded; charset=UTF-8"),out->{
+             JSONObject response=new JSONObject(new String(out,StandardCharsets.UTF_8));
+             if(!response.optBoolean("success"))throw new IOException(response.optJSONObject("data")==null?"Action refusée":response.optJSONObject("data").optString("message","Action refusée"));
+-            page="overview";archives=false;refresh();
++            refresh();
+         });
+     }
