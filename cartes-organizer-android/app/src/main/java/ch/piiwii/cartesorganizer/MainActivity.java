@@ -97,7 +97,7 @@ public final class MainActivity extends Activity {
         }),lp(-1,50));
     }
     private String base(){return site+"/" + API;}
-    private String authorization(){return "Basic "+Base64.encodeToString((username+":"+password).getBytes(StandardCharsets.UTF_8),Base64.NO_WRAP);}
+    private String authorization(){return "Basic "+android.util.Base64.encodeToString((username+":"+password).getBytes(StandardCharsets.UTF_8),android.util.Base64.NO_WRAP);}
     private byte[] http(String url,String method,byte[] body,String contentType)throws Exception{
         if(!url.startsWith("https://"))throw new IOException("Adresse HTTPS obligatoire.");
         HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
@@ -482,11 +482,11 @@ public final class MainActivity extends Activity {
         Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,(java.security.Key)ks.getKey("co_mobile_auth",null));
         byte[] iv=cipher.getIV(),encrypt=cipher.doFinal(s.getBytes(StandardCharsets.UTF_8));
         byte[] data=new byte[iv.length+encrypt.length];System.arraycopy(iv,0,data,0,iv.length);System.arraycopy(encrypt,0,data,iv.length,encrypt.length);
-        return Base64.encodeToString(data,Base64.NO_WRAP);
+        return android.util.Base64.encodeToString(data,android.util.Base64.NO_WRAP);
     }
     private String readSecret(String s)throws Exception{
         if(s==null||s.isEmpty())return "";
-        byte[] data=Base64.decode(s,Base64.NO_WRAP);if(data.length<29)return "";
+        byte[] data=android.util.Base64.decode(s,android.util.Base64.NO_WRAP);if(data.length<29)return "";
         byte[] iv=Arrays.copyOfRange(data,0,12),encrypted=Arrays.copyOfRange(data,12,data.length);
         KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
         Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,(java.security.Key)ks.getKey("co_mobile_auth",null),new GCMParameterSpec(128,iv));
