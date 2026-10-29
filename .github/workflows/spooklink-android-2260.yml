@@ -1,0 +1,453 @@
+name: SpookLink Android 2.26.0 - Simple importer
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/spooklink-android-2260.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        run: |
+          echo 'ANDROID_HOME=/usr/local/lib/android/sdk' >> "$GITHUB_ENV"
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40787810890
+          github-token: ${{ github.token }}
+          name: SpookLink-Android-2.5.0-unsigned
+          path: previous-apk
+      - name: Restore complete project and apply tested 2.6 UI changes
+        run: |
+          base64 -d spooklink2/build/android-2.1.0.zip.b64 > project.zip
+          unzip -q project.zip
+          python3 - <<'PY'
+          import base64,lzma,struct,zipfile,subprocess
+          from pathlib import Path
+          baseline=Path('spooklink2/android/v2.5.0/MainActivity.java').read_bytes()
+          Path('a.java').write_bytes(baseline)
+          data=Path('spooklink2/android/v2.6.0/update-java.diff.xz.b64').read_text().strip()
+          patch=lzma.decompress(base64.b64decode(data))
+          Path('update.diff').write_bytes(patch)
+          subprocess.run(['patch','-p0','-i','update.diff'],check=True)
+          patch2=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.7.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update27.diff').write_bytes(patch2)
+          subprocess.run(['patch','-p0','-i','update27.diff'],check=True)
+          # Arrange preset messages in two readable rows instead of four narrow chips.
+          java=Path('a.java').read_text()
+          java=java.replace('LinearLayout quick=horizontal();','LinearLayout quick=vertical(); LinearLayout topQuick=horizontal(),bottomQuick=horizontal();')
+          old="for(String phrase:phrases){\n            Button b=button(phrase,SOFT);b.setTextSize(10);b.setSingleLine(true);\n            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);\n            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(3);quick.addView(b,q);\n            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});\n        }\n        editor.addView(quick,lp(-1,35));"
+          updated="for(int k=0;k<phrases.length;k++){\n            final String phrase=phrases[k];\n            Button b=button(phrase,SOFT);b.setTextSize(12);b.setSingleLine(true);\n            b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);\n            LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,dp(34),1);q.rightMargin=dp(4);\n            (k<2?topQuick:bottomQuick).addView(b,q);\n            b.setOnClickListener(v->{input.setText(phrase);input.setSelection(input.length());});\n        }\n        quick.addView(topQuick,lp(-1,36));\n        quick.addView(bottomQuick,lp(-1,36));\n        editor.addView(quick,lp(-1,72));"
+          assert old in java
+          java=java.replace(old,updated)
+          Path('a.java').write_text(java)
+          # Apply the UI-only swipe changes on top of the exact 2.7 source.
+          patch28=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.8.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update28.diff').write_bytes(patch28)
+          subprocess.run(['patch','-p0','-i','update28.diff'],check=True)
+          patch29=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.9.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update29.diff').write_bytes(patch29)
+          subprocess.run(['patch','-p0','-i','update29.diff'],check=True)
+          patch210=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.10.0/update-java-actual.diff.xz.b64').read_text().strip()))
+          Path('update210.diff').write_bytes(patch210)
+          subprocess.run(['patch','-p0','-i','update210.diff'],check=True)
+          assert b'swipeEmoji' in Path('a.java').read_bytes()
+          source=Path('a.java').read_bytes()
+          assert b'tv_no_signal' in source and b'tv_broken' in source and b'v2.10.0' in source
+          assert b'EmojiSwipeFrame' in source and b'swipeEmoji' in source and b'duration_seconds' in source
+          assert b'renderMessageBitmap' in source and b'message_png' in source
+          assert b'makeEmojiPng' in source and b'message_style' in source and b'buildEmojis' in source
+          Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').write_bytes(source)
+          with zipfile.ZipFile('previous-apk/app-release-unsigned.apk') as archive:
+              matches=[]
+              for name in archive.namelist():
+                  if not name.endswith('.png'): continue
+                  blob=archive.read(name)
+                  if struct.unpack('>II',blob[16:24])==(96,96):matches.append(blob)
+              assert len(matches)==1, 'Previous launcher icon not found'
+          Path('android/app/src/main/res/drawable-nodpi/ic_spooklink.png').write_bytes(matches[0])
+          manifest=Path('android/app/src/main/AndroidManifest.xml')
+          m=manifest.read_text()
+          manifest.write_text(m.replace('android:label="SpookLink"','android:label="SpookLink" android:icon="@drawable/ic_spooklink"'))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 9' in g
+          gradle.write_text(g.replace('versionCode 9','versionCode 19').replace("versionName '2.1.0'","versionName '2.10.0'"))
+          print('SpookLink 2.10.0 Java and icon restored:',len(source))
+          PY
+      - name: Install better TV icons without changing the network protocol
+        run: |
+          cp spooklink2/android/v2.11.0/TVIcons.java android/app/src/main/java/ch/piiwii/spooklink/TVIcons.java
+          python3 - <<'PY'
+          from pathlib import Path
+          java=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=java.read_text()
+          old='String[] names={"⏻  Allumer","⏻  Éteindre","▦  Parasites","▥  Aucun signal","⚡  Fissuré","💥  Cassé"};'
+          new='String[] names={"Allumer","Éteindre","Parasites","Aucun signal","Fissuré","Cassé"};'
+          assert old in s
+          s=s.replace(old,new)
+          before='TextView label=text(names[i],15,WHITE,true);label.setGravity(Gravity.CENTER);tile.addView(label,lp(-1,31));'
+          after='ImageView icon=new ImageView(this);icon.setImageBitmap(TVIcons.render(kind));icon.setScaleType(ImageView.ScaleType.FIT_CENTER);tile.addView(icon,lp(94,53));TextView label=text(names[i],13,WHITE,true);label.setGravity(Gravity.CENTER);tile.addView(label,lp(-1,25));'
+          assert before in s
+          s=s.replace(before,after)
+          s=s.replace('TÉLÉCOMMANDE  ·  v2.10.0','TÉLÉCOMMANDE  ·  v2.11.0')
+          java.write_text(s)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 19' in g
+          gradle.write_text(g.replace('versionCode 19','versionCode 20').replace("versionName '2.10.0'","versionName '2.11.0'"))
+          assert 'TVIcons.render(kind)' in java.read_text()
+          PY
+      - name: Apply 2.12 Wi-Fi reconnect and priority STOP updates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=p.read_text()
+          changes=[
+            ('final ExecutorService io=Executors.newSingleThreadExecutor();','final ExecutorService io=Executors.newSingleThreadExecutor();\n    private final ExecutorService priorityIo=Executors.newSingleThreadExecutor();'),
+            ('private String deviceId,host="",token="",selection="",page="effects";','private String deviceId,selection="",page="effects";\n    private volatile String host="",token="";'),
+            ('private boolean connected=false;','private volatile boolean connected=false;'),
+            ('io.shutdownNow();super.onDestroy();','io.shutdownNow();priorityIo.shutdownNow();super.onDestroy();'),
+            ('TÉLÉCOMMANDE  ·  v2.11.0','TÉLÉCOMMANDE  ·  v2.12.0'),
+            ('JSONObject ack=post(address,"/v2/connect",payload,"");String t=ack.getString("token");','String knownToken=prefs.getString("token_"+address,"");JSONObject ack=post(address,"/v2/connect",payload,knownToken);String t=ack.getString("token");'),
+            ('    private void send(String kind,String value){if(!connected)','    private void fastStop() {\n        final String server=host,secret=token;\n        if(server.isEmpty()||secret.isEmpty()){status("Aucun PC connecté pour STOP.",false);return;}\n        priorityIo.execute(()->{try{JSONObject packet=new JSONObject();packet.put("kind","stop");packet.put("count",0);post(server,"/v2/send",packet,secret);status("",true);}catch(Exception e){status("STOP indisponible : "+e.getMessage(),false);}});\n    }\n    private void send(String kind,String value){if(kind.equals("stop")){fastStop();return;}if(!connected)'),
+            ('}catch(Exception e){showConnection(false,"");status("Envoi impossible : "+e.getMessage(),false);doDiscover();}});','}catch(Exception e){status("Envoi impossible : "+e.getMessage(),false);}});')
+          ]
+          for old,new in changes:
+              assert old in s, 'Missing source anchor: '+old[:60]
+              s=s.replace(old,new,1)
+          p.write_text(s)
+          g=Path('android/app/build.gradle')
+          v=g.read_text()
+          assert 'versionCode 20' in v and "versionName '2.11.0'" in v
+          g.write_text(v.replace('versionCode 20','versionCode 21').replace("versionName '2.11.0'","versionName '2.12.0'"))
+          PY
+      - name: Apply tested heartbeat hysteresis and final Android version
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=p.read_text()
+          before='private volatile boolean connected=false;'
+          assert before in s
+          s=s.replace(before,before+chr(10)+'    private int heartbeatFailures=0;',1)
+          old='showConnection(true,ack.optString("name",address));status("",true);'
+          assert old in s
+          s=s.replace(old,'heartbeatFailures=0;'+old,1)
+          old='private void checkStatus(){final String h=host,t=token;if(h.isEmpty()||t.isEmpty()){discover();return;}io.execute(()->{try{get(h,"/v2/status",t);}catch(Exception e){showConnection(false,"");status("PC perdu · reconnexion automatique…",false);doDiscover();}});}'
+          replacement='private void checkStatus(){final String h=host,t=token;if(h.isEmpty()||t.isEmpty()){discover();return;}io.execute(()->{try{get(h,"/v2/status",t);heartbeatFailures=0;}catch(Exception e){heartbeatFailures++;if(heartbeatFailures<2){status("Wi-Fi momentanément lent, nouvelle vérification…",false);return;}heartbeatFailures=0;showConnection(false,"");status("PC perdu · reconnexion automatique…",false);doDiscover();}});}'
+          assert old in s
+          p.write_text(s.replace(old,replacement,1))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 21' in g
+          gradle.write_text(g.replace('versionCode 21','versionCode 22').replace("versionName '2.12.0'","versionName '2.15.0'"))
+          print('Final Android 2.15 source:',p.stat().st_size)
+          PY
+      - name: Add two fullscreen TV effects and vector menu icons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          folder=Path('android/app/src/main/java/ch/piiwii/spooklink')
+          import re
+          folder=Path('android/app/src/main/java/ch/piiwii/spooklink')
+          current=folder/'MainActivity.java'
+          Path('a.java').write_bytes(current.read_bytes())
+          patch=lzma.decompress(base64.b64decode('/Td6WFoAAATm1rRGAgAhARwAAAAQz1jM4BwFCFBdABboBAwi42Ul/e8tWTZa00zmj2VsyGKwYsVXYywQBaeypyM4MfilzVZg7qRKDt6oRHsJJ2JHHTsrJLk/ZEvJrvgwXadSzWSUlk8DvxZSFHDPFT7cSZgolkxUOgLmM7a+XuL7nlKwYT+t6QNxz7rGOeAvT9wueCaisQtHV4MOny6BweJhLEllDBO645WKR7wAp2ARqUq3ypJAnrE10yU0SLIL8A9ZkhezozFgzMSEvlyTJxC28WIlT5D9gY/ju8yZO8vkF0EOfskTO0Stymz9gxeYErRPrfUw1jpHFfbKQwgyc+2LM0tKBg8NPLiQs7SLR9n37Z7ymEV+Qbf8/kH/CxUm0u5I71CyK/cA8umJUhRU9zZVB5tPYJ6VBXJska6RsNUPQemoGWDEvtbn6dPGRRsO4tSqIvCaW4Dymfj1eE62o2CNHuLjqNdTZT+YwVMlvzqqvlZUy413zQr9fVcJVfGMYorzEt391MceVgFkIz9eneiuleVCsullfWmd5r73wEmcKOw//878uiseedpOvZO3V5mOM6XGFJ/qsk3h8WM0aAqATk6R8L3vCrsfbaOLXysJIzKqfIpUZENRJsl/6e09RclepKNy/GhsXjmVarFHqS2X+wNF8Ck5jtPup3/LaEFcxZS/onuAUHPQfN4YDUfhRKyj+o9nKHkU4NMSlAuC0dzxoGEud3LK+IOCXooLr5YjNxYpSvm8/gvZ94WO6vGGKcTm9SpHgTEuUuDW7RqLasIcwb9CreggZ3YuPeUn0+ffDhc0uMlaoy8/WJqMJZUAwOmJArCAcIVJKWbDQNUE2WuhU75KnZmqWH43ZUz4hmnFLskkKrgd3Idr3DHoIQxUMhaaDNeT0VjLsJmO++U3NxaSqQPH3nEU6/nRRuoUDl5ikKXin98lo+0YTyFtwbp/om+YfgG1kupJRFd4YiivQzhGdFndXk6xjhbJKiuWj8pXY+bQQ4urOs7ycOqsFVnZFiP2u3hsJulVBg26AyeZ4hvCJTVya3J+lG2ZPSOhB7hh6gpmH8LYY4aFvu0E+0qvOsrkHGK+svbdifRuru1e56QOllzI1ihU74TZE+rJg1lhuaMMXI8CUE+wNYFptFNqI+GNHLHuDNIIF+YW0TIMf34s+G69o0zs8A3RaLuWGZjybus7IsmJrGKq0cjxwlMBw8ik4sQ8rZuFjsFtEsyyMjYYJyQGRdYkBf8qZ0BSkjUSlyjdyPkOxmkPkzwADEBGzHasf7uaxXHhYSSwBWRGU/sN4ZaWEjeN1GRqYuC/YBlIHO6MYU8z4erwZRNL/KX7h0ew63Q1n9Tmv2w1aFStd7aU047JxW29ztEDdP205Er8Mw+fvSHYJp193pegS9vDR1amkeT7diSmezFRZYoScibfPFQ2rMHlsQmPMH5FPa5JksArsFxjpbxSfxJRFoOc8FOpDdfhtUN53KdV3iroKBIMEv4CeaLvM7dFwBIzluns8Dy+xjtrusuWM4/K0UJmVXTk6auFqMVyDy8OHohU4AsvP/2YnwL5OrDA2pHLddvhRqd5aCwq+fo1NruPsgkshfyc+CqwYfjd+svi1ZP7e/iiO0Ffp0pPu1Ab9AmzNL2V0CBhtJ7xmOdMOV1fHxP1TsIRfZFDqI19oHBLRcVn8N93Mblr4AgVsi9A5dv47SCIitcnFhhtE2QuNx6T8C1FO7IByZdtCBMvousTaLWvrOPKdIXcoJWpxtVpG7e6/YmGuRyvONd9k9NRDMgsOuKr7f1g+jIVPSRYpoL/V9Y+lOFHfepUJWc3Yktvijp3F4keFLNbKO5e6nDmmq09ofm0pJtNHoSYZQ1cIgn8kiegvb1MN9I+3ibOrKFuonwS+MGkDln/2SdsMKVfqAS32grDH/qKwCAMqnQTSBVJukgGuKZ+QshsCFE/x/p/KGam9H7DdGrDJZiBi5GtOhfodAJ4e+uGMja8xxYWm8nDB53aqSndz5sJ7SbHUYTE7ynvcqwmrlcbHqhGZE43Mvh90jOMEOjm2f3YUqvDXbm2X686qAGF/IZw3G0XqKOpXuqAtldEQ1FO4GOkjpxBe0OzDOWy3Xmp6xnl4hT4pp2/zvHM0hoSnGW3Sod15sjpPLD1ocWIIIpCOyDqy+KS4jdlGA1MzeUNx47EjTQdcGnNcZjxVOh8fBSzAqUIry8SmgSmvm13MDl3/L/iAiZWuWRisCYs3ibD7ZJEksJnE15/TDVEyNCiszlMX1vslt7k6da+hKCO1pfz40PgQRUvGD2ybgJkGHot3mEeTc2g0R83UVWd/6YBW21Y//qphrNc8e4mwBdnrZnxg7QPFSeJ5jS7aZZdmYL4K34PMgwJFntOfvGSsZAgCQqUW0DzkyoaB6RyFx8vpwwjfXGKfBdqhtkZ/sW8RDnh+0wMOGNxei41iLCLSFApYN7RyO/FvuKbc3e9/sXYQAIlepbc++ZC64sxHt5HrXpi2VBIubs0ovNWNAo7CjyHNq3FPb2rwCNpuXZ640Gj3m8ybzvsDQAnkBqJbIYT6dX7ZyE8ycUAy4t1Uw7s4A4E+WxaRublispBdssiYdK01lLt9lgMsboIdxtbVaUp7yexr3m0Ae1aSRLfpVU32skd3xNfo5/1iHBu9ERfyMqPMmz05S9dqr1hnvgvNaeR/JXKAilu0dUmkp4AjS76F2HM3humgtdZ/71erTdSbidXfdOgW1tdEaW6LJJZSUvAB8l7NxdW4TTJcWGDXzEg26D9zdxruzNKwLI4rKUI9u+ctKu+pID4K+7iN3dmH1MHhSSCrEK2DqatW4CqyOWmwAvaGbSXeUJ4ARp+mxPvXd/+fhq/TzyA4ilKy22q7AAAzcfATZEMcPMAAewQhjgAAGnFeSCxxGf7AgAAAAAEWVo=')).decode()
+          chunks=re.split(r'(?=^@@ )',patch,flags=re.M)
+          # Only the navigation hunks: replace the TV grid as one atomic method below.
+          keep=[c for c in chunks[1:] if re.match(r'@@ -(\d+)',c) and int(re.match(r'@@ -(\d+)',c).group(1))<400]
+          assert keep, 'No navigation patch'
+          Path('nav216.diff').write_text(chunks[0]+''.join(keep))
+          subprocess.run(['patch','-p0','-i','nav216.diff'],check=True)
+          s=Path('a.java').read_text()
+          beginning=s.index('    private void buildTV(){')
+          ending=s.index('    private void buildMessages(){',beginning)
+          method=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.16.0/buildTV.xz.b64').read_text().strip())).decode()
+          s=s[:beginning]+method+s[ending:]
+          s=s.replace('v2.12.0','v2.16.0')
+          assert 'NavIcons.render(key' in s and 'tv_glitch' in s and 'tv_bsod' in s
+          current.write_text(s)
+          for dest,blob in [('TVIcons.java','TVIcons.xz.b64'),('NavIcons.java','NavIcons.xz.b64')]:
+              data=Path('spooklink2/android/v2.16.0/'+blob).read_text().strip()
+              (folder/dest).write_bytes(lzma.decompress(base64.b64decode(data)))
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 22' in g and "versionName '2.15.0'" in g
+          gradle.write_text(g.replace('versionCode 22','versionCode 23').replace("versionName '2.15.0'","versionName '2.16.0'"))
+          assert 'tv_glitch' in (folder/'MainActivity.java').read_text()
+          assert 'NavIcons.render' in (folder/'MainActivity.java').read_text()
+          print('Android 2.16.0 ready, new effects and navigation verified')
+          PY
+      - name: Add Android monitor selection and move STOP to center
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          java=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          before=java.read_bytes()
+          Path('a.java').write_bytes(before)
+          patch=lzma.decompress(base64.b64decode(Path('spooklink2/android/v2.17.0/update-java.diff.xz.b64').read_text().strip()))
+          Path('update217.diff').write_bytes(patch)
+          subprocess.run(['patch','-p0','-i','update217.diff'],check=True)
+          java.write_bytes(Path('a.java').read_bytes())
+          # Avoid shadowing the outer TextView named h in buildSettings.
+          source=java.read_text()
+          assert 'final String selected=monitorIds.get(idx),h=host,t=token;' in source
+          source=source.replace('final String selected=monitorIds.get(idx),h=host,t=token;',
+                                'final String selected=monitorIds.get(idx),screenHost=host,t=token;')
+          source=source.replace('JSONObject answer=post(h,"/v2/displays",request,t);',
+                                'JSONObject answer=post(screenHost,"/v2/displays",request,t);')
+          java.write_text(source)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 23' in g and "versionName '2.16.0'" in g
+          gradle.write_text(g.replace('versionCode 23','versionCode 24').replace("versionName '2.16.0'","versionName '2.17.0'"))
+          source=java.read_text()
+          assert 'addTab("STOP","stop");addTab("Messages","messages");addTab("TV","tv");' in source
+          assert 'monitorSelector' in source and '/v2/displays' in source and '__ALL_DISPLAYS__' in source
+          assert 'v2.17.0' in source
+          print('Android 2.17 patch OK; source',len(source))
+          PY
+      - name: Apply Android 2.18 screen switches and readable dark spinner
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          encoded=Path('spooklink2/android/v2.18.0/update-java.diff.xz.b64').read_text().strip()
+          Path('update218.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','-p0','-i','update218.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 24' in g and "versionName '2.17.0'" in g
+          gradle.write_text(g.replace('versionCode 24','versionCode 25').replace("versionName '2.17.0'","versionName '2.18.0'"))
+          source=src.read_text()
+          assert 'setMonitorEnabled' in source and 'selected_devices' in source and 'readableSpinnerAdapter' in source
+          assert 'monitorSelector' not in source and 'v2.18.0' in source
+          print('SpookLink 2.18.0 monitor toggle APK sources ready:',len(source))
+          PY
+      - name: Apply user image import and optional audio settings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,lzma,subprocess
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          encoded=Path('spooklink2/android/v2.19.0/update-java.diff.xz.b64').read_text().strip()
+          import re
+          sourcePatch=lzma.decompress(base64.b64decode(encoded)).decode()
+          chunks=re.split(r'(?=^@@ )',sourcePatch,flags=re.M)
+          assert len(chunks)==9, 'Expected 8 patch hunks, got '+str(len(chunks)-1)
+          # Apply all exact hunks except the last, whose context differs
+          # slightly due to the cumulative 2.17/2.18 build.
+          Path('update219.diff').write_text(''.join(chunks[:8]))
+          subprocess.run(['patch','-p0','-i','update219.diff'],check=True)
+          java=Path('a.java').read_text()
+          assert 'final String renderedMessage=messagePng;' in java
+          java=java.replace('final String renderedMessage=messagePng;',
+                 'final String renderedMessage=messagePng;\\n        final boolean playSound=soundEnabled;\\n        final int playVolume=soundVolume;',1)
+          assert 'packet.put("duration_seconds",tvSeconds);' in java
+          java=java.replace('packet.put("duration_seconds",tvSeconds);',
+                 'packet.put("duration_seconds",tvSeconds);packet.put("sound_enabled",playSound);packet.put("sound_volume",playVolume);if(kind.equals("custom")){packet.put("asset_id",value);packet.put("text","");}',1)
+          added=''.join(line[1:] for line in chunks[8].splitlines(keepends=True) if line.startswith('+') and not line.startswith('+++'))
+          start=added.index('    private void buildCustomImages(')
+          methods=added[start:]
+          anchor='    private String makeEmojiPng(String value)throws Exception{'
+          assert anchor in java and 'private void buildCustomImages(' not in java
+          java=java.replace(anchor,methods+anchor,1)
+          # Decode a literal linebreak in the generated Java source, not a backslash-n.
+          java=java.replace('messagePng;\\n        final boolean','messagePng;'+chr(10)+'        final boolean')
+          java=java.replace('playSound;\\n        final int','playSound;'+chr(10)+'        final int')
+          # Keep Java source free of literal backslash-n introduced by YAML escaping.
+          java=java.replace(chr(92)+'n        final int playVolume=',chr(10)+'        final int playVolume=')
+          src.write_text(java)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 25' in g and "versionName '2.18.0'" in g
+          gradle.write_text(g.replace('versionCode 25','versionCode 26').replace("versionName '2.18.0'","versionName '2.19.0'"))
+          source=src.read_text()
+          assert '/v2/upload' in source and 'CHOOSE_IMAGE' in source and 'sound_enabled' in source
+          assert 'sendCustomImage' in source and 'v2.19.0' in source
+          print('Source Android 2.19.0 import and audio OK:',len(source))
+          PY
+      - name: Support normal size phone photos, HEIC WebP and larger GIFs automatically
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          p=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(p.read_bytes())
+          encoded=Path('spooklink2/android/v2.20.0/update-java.diff.xz.b64').read_text().strip()
+          Path('upgrade220.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','--fuzz=2','-p0','-i','upgrade220.diff'],check=True)
+          p.write_bytes(Path('a.java').read_bytes())
+          gfile=Path('android/app/build.gradle')
+          g=gfile.read_text()
+          assert 'versionCode 26' in g and "versionName '2.19.0'" in g
+          gfile.write_text(g.replace('versionCode 26','versionCode 27').replace("versionName '2.19.0'","versionName '2.20.0'"))
+          source=p.read_text()
+          assert 'prepareUserImage' in source and 'ImageDecoder.decodeBitmap' in source
+          assert 'MAX_GIF_UPLOAD=20*1024*1024' in source and 'v2.20.0' in source
+          assert 'addTab("STOP","stop")' in source and 'setMonitorEnabled' in source
+          PY
+      - name: Fix JPEG uploads, remove saved images and update app version
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          path=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(path.read_bytes())
+          encoded=Path('spooklink2/android/v2.21.0/update-java.diff.xz.b64').read_text().strip()
+          Path('update221.diff').write_bytes(lzma.decompress(base64.b64decode(encoded)))
+          subprocess.run(['patch','-p0','-i','update221.diff'],check=True)
+          path.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 27' in g and "versionName '2.20.0'" in g
+          gradle.write_text(g.replace('versionCode 27','versionCode 28').replace("versionName '2.20.0'","versionName '2.21.0'"))
+          source=path.read_text()
+          assert 'jpegInput' in source and 'removeCustomImage' in source and '/v2/assets/delete' in source
+          assert 'v2.21.0' in source and 'addTab("STOP","stop")' in source
+          print('Android 2.21 complete source',len(source))
+          PY
+      - name: Optimize phone photos and send display command without queuing
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          data=Path('spooklink2/android/v2.22.0/update-java.diff.xz.b64').read_text().strip()
+          Path('upgrade222.diff').write_bytes(lzma.decompress(base64.b64decode(data)))
+          subprocess.run(['patch','-p0','-i','upgrade222.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 28' in g and "versionName '2.21.0'" in g
+          gradle.write_text(g.replace('versionCode 28','versionCode 29').replace("versionName '2.21.0'","versionName '2.22.0'"))
+          j=src.read_text()
+          assert 'MAX_EDGE=1600' in j and 'post(server,"/v2/send",packet,secret);' in j
+          assert 'v2.22.0' in j and '/v2/assets/delete' in j
+          print('Source version 2.22.0',len(j))
+          PY
+      - name: Load image thumbnails in background to keep Android responsive
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          data=Path('spooklink2/android/v2.22.0/thumbnails.diff.xz.b64').read_text().strip()
+          Path('thumb222.diff').write_bytes(lzma.decompress(base64.b64decode(data)))
+          subprocess.run(['patch','-p0','-i','thumb222.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          j=src.read_text()
+          assert 'thumbnailsIo' in j and 'MAX_EDGE=1600' in j
+          print('Responsive gallery 2.22.0 ready',len(j))
+          PY
+      - name: Finish Android JPEG reliability update 2.23.0
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          s=src.read_text()
+          assert 'v2.22.0' in s and 'private byte[] prepareUserImage(Uri uri)' in s, 'Unexpected source tree'
+          s=s.replace('v2.22.0','v2.23.0')
+          old='status("Photo transmise et lancée sur Windows",true);'
+          assert old in s
+          s=s.replace(old,'status("Image reçue par Windows ; animation demandée",true);')
+          src.write_text(s)
+          gradle=Path('android/app/build.gradle')
+          g=gradle.read_text()
+          assert 'versionCode 29' in g and "versionName '2.22.0'" in g
+          gradle.write_text(g.replace('versionCode 29','versionCode 30').replace("versionName '2.22.0'","versionName '2.23.0'"))
+          print('SpookLink 2.23.0 Android source version verified.')
+          PY
+      - name: Apply native import navigation and fixed-corner image controls
+        run: |
+          python3 - <<'PY'
+          import lzma,base64,subprocess
+          from pathlib import Path
+          encoded='/Td6WFoAAATm1rRGAgAhARwAAAAQz1jM4ENsEvFdABboBAwi8xMjOasuG3meXAtvfo8fHpEM570F8dTbQZAsdlpbof5lyT+Id0blRXEw29C3fIitzy/PZLBHSIUEoSd+YamPO11agprgSmgThfshFOn73kg0G1djIY1/OXuorAxrhFCQsecc6EDM+oQ57tmbxdaCmjkQC1R92pO7bAM8/ytBu4ie5NX50+ksKU25oJSCnw780OmTmVO6PCxH+fggvl6Ug+Maf40eFuHjJgijw/IDtzPmHE20Qcm2sWio7zeqGl/xmodmpJ+T9e7lcaVAVz7HB+FjDZvb1CtGmsgs+ul5hLlShWyxCHWPguNcPKcn0hv5Og06oHRLSt1CAqlakx5zRbUVx2eo2JRJkrOUFpUYzC3N/ItfZNmRBcrZVrHg6T0yDYKw0beU0YvE1Qbhx/bUhlpLY1ZTw8sUuORizV6QFcHofiXCLDUn7uYp5kwmau+bW1ECSZUSSN4oOBUFC0SJVdAm1GKIwpo8lrC5vf6QUNouHeHn9r0tfrpVYJIzFvSt1A0t83nfZkrQTf3oDEJD/bHBc1O8HnJyyVswgND/22gJyacmlTzb0UTh/7cANxRQXpG0pj0icvGp8diWDsXeRQykOXGJpos0tr6wgH3Jc+fowP8Alj6+vcmlcFso+727F88ahH+AwdwvpnTVEST8ZvWPiCPdT01O7VXq9Tj21OeuBqU6cMKdkJSbQyj58XE8rb9CZaZO1vCFEfU4CrsyGjExv+U4j30tLW8e+3AUvb5gJOB9w8uTTnp9Epl7rRLjyFSVSqxVxwgBeX+E5QiBqLtLRtsX/W2TbznYhCjcLnucnOll49DQdwkQJ3JaBuGg91aQQ8xDukyT9waBYvtBpSGmw48tt/PPGjntzBExo4Y/V1V20rB2fSXoKPzibpV8cUgXr6b7sbTZLGwElKQvObEftsBfTnFiD6o+hgGQTdErHrE9v+nTXdjCamqtqqziFXmdyFO2Ij4cv3nN6Helif2ZvcmA7AGH4JOz+SjHUYBtaMHjBNdCHDmMz61T88fXS9yziVK6DlrK3eVtJpBvhldvqduEzvCZroNyjMboXBkgCQFhDGff9lrr79sunu2f+4caT+yqxGWO2mFJbDNfyWTjz4KL50UxyHhsqC5LnM/4KEZPKSwXCu1SGXHh+ClWdMvgtsyJY9uXXBkB0nrLIka4f2+Vgp0xsEh2wtVFHFlqHNm9Tn+9vg4k1GBNWP3xGLbWxei4RlVFp0EZorMWIkhMh9+rANaV4jhMMQZ7ZIMkkx3NlmhKmUpX1Vk12d6bertJvzyLGDod36UcR1pWUB+AHt5uaoamqbDBJO7+4tAn4RkVRVn/QwqwE6jm10wIcB05Fk4aq1Wn6EctpY8R737nBn1tOQh8G2HY0OVdqDY6icxd7IfxIwdLd+NXOvCUy2FgixJxTb/0x9Bv3Rqyi8CSwAeygdCLdFjk4n9zePREbvgTf1a0T6Z/ER0DIm+XI6bnrtu9Xh6tWfQTt66qCuu6CVx2hw7CDcbIq5+U4YazEU4LGJIVObUloJ2dnohUTA/fUT6NaqbsGzdVJn0Zducwa84cWsgQ7P1mDPXnubOzd0XMAH/G1sylC+pzc2yHLjYG5MVg5Qv15LM3Jpd/WuOig1hMCInyk27R688Ik/v6/CT9sQIKPy84C5FwW8/CEhXmAv3o80TFVkPwL/+rRsmmayTGP5AARc9g6gMcMf/fPXpjfSJk7wzb4Z+54gLKUvor+FmOjVPs+UoR3mA9vRRVQ1JoxkOqtbDwndi2drNqg/f/lnoyCUp8gyK6oihlHtAivpwPbMI3B9kbPHyy+v0yJa5XW+ph8D/KjM3568KPCtFrSR73fRnDmfT51fGPI2ZcS5WydbZUfA7Eu9MPV9v+cmrPoXbhCO8sxSk/LZzFUePdT1p4bZmUJbrJmHA0H1LPOZq1m7633+xIHjhbH9pnS8j8cnLP7c0LTayNbLjTaIYK+1zFN9ypD5FYzZMpC+MEUP4KBMNAIVvJYbt3yFzPC6KgnWGLM/tD+Ptmm6J8RD9Qi3oUdX0F0JBYV/slURdfd9mfSamULTyCUsH1Ryi5NbHk+ndZtIuFeYnwpVXqJWt+FjwrdZBjSZFb8RVHOtdUaUctYqAk7doNpwDLOQIFO05PMmPQiuffT0p0bJaGFLTLFIXn1gPmHC4sM37QoXQ5hCTJxm0oAwFTMk8kWIdKD/BdAtCncz+DZQk7mfWuJYeKJJLdyU+E8VwpZuH4F1OL+al/Bi0suG6Z/e7xk0P1ziEe5jIjjR2eRSZqNXP/YIshJV7SYTXK9iQbL3QtkFG0ayyI4fOVL5ZElbe8oSPLM+tM9J0ddD7BHmPHG7KlqIGwa7MuE7wzjB7GfI1qSv07VJolC78vxG/eK6HRBXpMIVWL9k2srNHFeQLMSwmcR1JszulPEg0Ho82KLYJn6cwrtgND2QMGciOUT/K0cvbckBh6WnNTw4ou+Dv9iBBQJtZYIQv94ig4naGJDKGEokktj2ABq+u48GZ4nUCMczJMuY4mDV1UuIP7SLVrUmg05Adfq5oYsHWrktbd0gX0XS4MGFf3PPuoLsRtP6XdixG1dCFP3p+xXqbcXmd9GGyNfo9BselB69+xWHEBsAKLy0jjTlHSjgtjixgJb1FsggtuqlvaJTM40+mn3Otf8RD13E1R/xCkc1ktFw4xxEg+xYOTgxWEkU8szHFBtEkeHdUySD+DjvgxSjrDMIlYI/4vlmlb0t/hECZZlXfEKqlNzTjTlz3Uvy6fQmiGrh9gyCbCFw5pcozNaEQhFqaqj1MumhrheO0Njn0nuThGSCpbOvyO1w05Kpiz4Tlvbvg17JFvvhujUmBEGFEsbwFe8/aQeBb2+n5DpGx9fVjaP/g1nQjwhfDhVHY6DDe7HyPBzg6hbm9iuejf+22Dl54VU+1w6wxgJarKixbvxGoO5J3AC/jrw41CBuv5p5+hmn6sOwUQEngdKAd1XBZmhs83UGk2V8t3Do65pJkvgh456BYoEj/tDPILW3h0qh561JCYBPdvcIpp7TYhj/Fo3465T6/LhXj0S8C3dzMBUW9uItOVqS0hmEFxz66B6r9rcQWX7x3jrAGHpadPiP+YulV4IniqA4ugjZSc7nPd4UFjE5PJw1wd4rOOLVoAVXjogfit18v1m+LhNyFF6vFYmA6Ws4Snw9ZYytM/1WXmvMgRz1MOTEDnctKOw1Qq8lhUkp1ZLhQzrAq/Cm4V63t8zZsdUVzUIQlLPzzBxlsbBHmXmlCaLKuuBURiFJ/6imDGCIfBYb9CXCvbj8QZ69hYw31eSTYjwh3lbrUZAG1XcUcVZ2vEEv+THvuj1XnR5M3w8ARy7AOZUVaDJELvUqzWPbefbzx9bBdWp6SLAa5juHKJD/INDBexK3rPAlSgKKnbqSzlUTBO+kSjL9qFH1/lUvT1BcMej3VEBcCwS/FQPDxg2dF5qXgiIDTbNWm5jOTr/HCm+BcsdxRBAxZFvYWrpP5JouKc9a9Zk9qbiPK46Opgy6wdIDBn9OxrBzUjMOCZDptDyxAXeE5JuRFifGTSjw+1jZ5uSiMwukCv1/x7YjOZcsDYYasWcRTuf73sDZPpx6JIxLTGtSSE7ZYpSnTa8Tvi27XSg/EwliFdieaKUp+qVxjjwG1u/6bqWdXr/A16IlO44FUj/O4QLb+XE53vmoPaQdZWfZCMliJRQgG4PfM3nSv41N/UbNUkPtEwECiQXnRYonGqExYJE28hpYhgSixSbNxuw3KzR7QwC+9uKC9+yDmRokGRSOsO+i3k96iTaEXhAZTBe1DJtLQ3P6zBHbdrP2dB3JdCQxeegyUQdEmo0RMGIE5tkh575aMLwc+xMFqHaBksIMPieziV6bKGEMwm8dCtaH9ciE0Ec+PH9UheR/oMM5AyJSQP1NHlS8GjaY+Jln+JTUNBO5eAjgAXHwgSRAxdR6KC/4n9mEaC/RTnMyz30jZrmRefBfP8yjR8tp8ZwEe/IQJj4I0AijpI8Irq4HOg0l+dOhP1h0a7EjFTb+vF2MXuS02sEZbCECUBJ4FoMPQJCv+Q3tRELeIzhoPaqyUCJqI4MP9fQUg7yFvgDrXUde8oYQCJgEPQHyeS6eaaNet8txlTht0E5/lkBWkyZjm83ojd8SB5ezca8yU3/JJ2ffPRhwZQhzDqXI/ejY89usXHscCZ26u++EDLhDP1YFas2BlEkNKeE7/vj74v1JdvrGX/kN1RKjBjukNTKJY9x0JddmSdA968CCquLNNFzQV4J13GwCaLYMT8j8oDTAxQUvBAeuK33mMrYfi7SlWCBOllcjCgB7sWGXP6n6buVPWYTx8/F08di+1I2lj8OvsWlQQF07gcgj4L8/Y4Zf7a2AwLi4SoJGtkAH+pAhZehclf7c/WC8mEJ5F8KWJc+u9SP3W11XVN+bSLzSvZ7xUh+te7SJ9C0APDqtjbmdMhKX9l49a2ORWlsIrEoWb0wfTWqeVMK07a7g8VNo1cFEcU0XHymmoGskLwufNnr54Go1LwLGdpkxM4iwrr/Z2yuxEMv7BWhpv6nefAIrhqEu15jNY6m38Q0FoAycnca/AO0h105XufstEhn7TPgqNCYFzrJkiwD+CVdHK9P5POMvE/FTd1LWr8mGEuQB2XevE32j9j9HeOUKpwklD4w1aL6P+rEDs3x4bF0AkK2fFzUwmIDu9EHHi8KRhvfb8gZsqEs00xl7VRycnjk1QQKRr+lf0ummPLBRTJ5yj8rUpgfu8Wrh89gaSffJ4p1zEjzKzqqoKQ5aCs2peIaLTq1uH5z3qjsq+Qbq8o+OOYOpV6UxWGXWyhAL94W2j0PyR7SEx7x9sg/JtYvT6pqSMPStyeag/d5E0DSjVILjHvpo40KP34mfUHLJNLxTeqs37JKyWvyKioAiYxnQ5bxkL2684MivSzTgHPaSXKlfvgN/x6GhsVNT1UTOzGqZYtqI8r87cgphZ31sE1X50d0vmP+BWY52ibhxpHyiIgSL+dQnlaIKKMcN09ezyROOHIoa9bVccHwYf/jB+ht/tCuuJRKV2KQf+ChPceHYjh07T8rrb09mR6eGR6fQ/w22Ly2APiPcPRhdMlTL9+0HQfsz9ctsIUnWb3C8Oxa+Xm2HXAZfXUlEND4xOlYH1SsO64o3LrYZ53gZ2PkyXbZX//GYKLmeAwLbZsDuVZcLupLOeXQbVz6gD1l87YER0whJcpw3XMbF9U1HJ+p0JTLF6SDKjVuMwk6F7qRM6iOOkjsbRbOXJng0QrLwsRVX5Hz1h4tOpTRnOGLdl+TSjv0kjMxlvIlMMFmR/KpipW1Gkl8H/OWhAqcg3gmFvPXcEksQ/Ovo02QKlakqZMIVwO5NewOIB83XW8OOSRg/Lf446b1MEVfpVWOw+WgocL1lwTpz46kXU3E+k+ddERnYP85qkZ1Qaohx1vGRjBn4kZLvvVyRnPCAYLfnc/7OL1GKCB1MBxnboqnHzeLirn7HGC1pqYwBcSSPxY0GJXp+ceK9cFCnqHM0RTTCubCVJPNyesUWSerM4M/29pmuCE4gwP5vojrymGMAxyZWzZylqyJDB1N3zpnP59CYV+ikzmylYIoUeuNs4WPniqj4DLPvmLJ/1/MGTmlKfv2b8bohLa3C7ZNyy1tgJljE7MHl1NSUmh8DX17pzN9jYGazqXp1KvWY2McVDI+SVu3kp7zmeY0Nx7VwHbEEotdfKGSEY32IDQLSX+0HdqIW6bGP9+4tA3mL4xSxDQdqBUmtH1qNW10/iuCNggGV63uacprWsQCTKMLm4anIXbqsSKO131hwnHZPZuyJfrxiOiDNYL55B43d8aIU/pj1n+Cbl8MRWporaCIgkZ/fuHFmzCsh314i9FDMVsXhUH37z5R/cnF1j8RcERlxTPSk/s72+yRg+7rpSyyNGRaar6hhfoVLCMlD9lCXx4ffS4v72WQYa8xRa4Z+QI5AsfsDK6p2kXlf166mW3YqGgvaSythxi6K+CEGbeiGfF5Qt7fSu79qu9AuulVt0Se2Yg/NIHP+3/1V7678o56hns7lzE+PGmAPMn9kDomOpfxSoZsYiUDunv0GwQqN4wIBBx1zMOhmddKUxIMMrTFl6XznJSe1kHRkGuzx6rY0ZGc6mw3HInNzoJCJdEawruPu+hwNweLqW5OLXsaqfajtP9GrOr5whlFvWOTh051uBb+IRqURJ5ju6RKZ0pEGph/Gh27gFlct+9kknxH3ODVW+H/Q+NnyghIBJ9EQKYRn0m4Lc9Sa9BjqBTIPExTSHo49G7csquiY8WlZc6r0m3TqF+zlt5surEaInVWtQr6+UetLaDl3ENFiLFTGdyzvmWAmsGM2i9+bB6Dm2yQDhQvQ7by3dx0s94hiGW7gopYv7HTO1emIUw03VT+r/MJpZHm+0aRieyHjFLWi7xRxiAWx0mXMEOYQ13LXdaKmQZR08X0+dMGyAAAAAAKDSVZBV1NOAAAY0m7YYBAOnGTPexxGf7AgAAAAAEWVo='
+          patch_text=lzma.decompress(base64.b64decode(encoded)).decode()
+          # The baseline GitHub 2.23 generated source has an earlier unrelated
+          # 32-line layout difference. Insert the new independent import screen
+          # at the stable method anchor, without relying on this patch hunk's context.
+          import re
+          hunk=re.search(r'(?ms)^@@ -1044,6 \+1069,58 @@.*?(?=^@@ |^--- a/|\Z)',patch_text)
+          assert hunk, 'Import screen hunk missing'
+          additions=''.join(line[1:] for line in hunk.group().splitlines(keepends=True) if line.startswith('+'))
+          patch_text=patch_text[:hunk.start()]+patch_text[hunk.end():]
+          Path('/tmp/import-224.diff').write_text(patch_text)
+          subprocess.run(['patch','-p1','--fuzz=0','-i','/tmp/import-224.diff'],check=True)
+          main=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          java=main.read_text()
+          anchor='    private void buildCustomImages(LinearLayout gallery){'
+          assert anchor in java and 'private void buildImport(){' not in java
+          main.write_text(java.replace(anchor,additions+anchor,1))
+          source=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').read_text()
+          assert 'buildImport()' in source and 'importPosition' in source and 'v2.24.0' in source
+          gradle=Path('android/app/build.gradle').read_text()
+          assert 'versionCode 31' in gradle
+          print('SpookLink Android 2.24.0 source verified')
+          PY
+      - name: Apply approved curved navigation v2.25.0
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import lzma, base64, subprocess
+          patch=lzma.decompress(base64.b64decode('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'))
+          Path('/tmp/nav225.diff').write_bytes(patch)
+          subprocess.run(['patch','-p1','--fuzz=0','-i','/tmp/nav225.diff'],check=True)
+          main=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').read_text()
+          gradle=Path('android/app/build.gradle').read_text()
+          assert 'NavigationBackground' in main and 'v2.25.0' in main
+          assert 'versionCode 32' in gradle and "versionName '2.25.0'" in gradle
+          assert 'addTab("Effets","effects")' in main and 'addTab("Importer","import")' in main
+          print('Approved SpookLink navigation applied',len(main))
+          PY
+      - name: Apply simple and readable import page v2.26.0
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          payload='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'
+          raw=lzma.decompress(base64.b64decode(payload))
+          Path('/tmp/spooklink-226.diff').write_bytes(raw)
+          subprocess.run(['patch','--fuzz=0','-p1','-i','/tmp/spooklink-226.diff'],check=True)
+          main=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java').read_text()
+          gradle=Path('android/app/build.gradle').read_text()
+          assert 'private void buildImport()' in main and 'importAdvancedExpanded' in main
+          assert 'Images récentes' in main and 'v2.26.0' in main
+          assert 'versionCode 33' in gradle and "versionName '2.26.0'" in gradle
+          print('Android 2.26.0 importer checks OK')
+          PY
+      - name: Compile release APK
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpookLink-Android-2.26.0-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 30
+
+# Rebased from exact 2.9.0 Android source.
