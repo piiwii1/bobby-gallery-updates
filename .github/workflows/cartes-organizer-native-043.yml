@@ -43,7 +43,6 @@ jobs:
           cp android-native/app/build/outputs/apk/release/app-release-unsigned.apk dist/Cartes-Organizer-Android-0.4.3-unsigned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" dist/apksigner.jar
           (cd android-native && zip -qr ../dist/Cartes-Organizer-Android-0.4.3-sources.zip app/src/main app/build.gradle build.gradle settings.gradle)
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/Cartes-Organizer-Android-0.4.3-temp.apk | head -8 > dist/APK-INFO.txt
           sha256sum dist/Cartes-Organizer-Android-0.4.3-temp.apk > dist/BUILD-SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
