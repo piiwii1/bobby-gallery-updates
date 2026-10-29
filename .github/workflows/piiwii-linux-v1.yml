@@ -1,0 +1,44 @@
+name: PiiWii Turbo Linux 1.0.0 - Chrome Spotify SoundRent
+on:
+  push:
+    branches: [piiwii-linux-1-0-20261029]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  iso:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and builder environment
+        shell: bash
+        run: |
+          bash -n piiwii-linux/construct-v1.sh
+          df -h /
+          free -h
+      - name: Compile real Mint ISO with preinstalled Chrome and Spotify
+        shell: bash
+        run: |
+          set -o pipefail
+          sudo bash piiwii-linux/construct-v1.sh 2>&1 | tee build-v1.log
+      - name: Upload diagnostics, app versions and checksum
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-1.0.0-TEST-build-report
+          path: |
+            build-v1.log
+            dist/*.txt
+            dist/*.sha256
+          if-no-files-found: warn
+          retention-days: 3
+      - name: Upload real ISO
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-1.0.0-TEST-ISO
+          path: dist/PiiWii-Turbo-Linux-1.0.0-TEST.iso
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
