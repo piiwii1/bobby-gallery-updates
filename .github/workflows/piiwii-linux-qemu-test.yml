@@ -35,7 +35,7 @@ jobs:
             -display none -monitor unix:/tmp/piiwii-bios.sock,server,nowait \
             -pidfile /tmp/piiwii-bios.pid -daemonize
           sleep 105
-          printf 'info status\nscreendump screenshots/bios.ppm\n' | socat - UNIX-CONNECT:/tmp/piiwii-bios.sock
+          printf 'info status\nscreendump %s/screenshots/bios.ppm\n' "$GITHUB_WORKSPACE" | socat - UNIX-CONNECT:/tmp/piiwii-bios.sock
           convert screenshots/bios.ppm screenshots/bios.png
           file screenshots/bios.png
           kill "$(cat /tmp/piiwii-bios.pid)" || true
@@ -54,7 +54,7 @@ jobs:
             -display none -monitor unix:/tmp/piiwii-uefi.sock,server,nowait \
             -pidfile /tmp/piiwii-uefi.pid -daemonize
           sleep 105
-          printf 'info status\nscreendump screenshots/uefi.ppm\n' | socat - UNIX-CONNECT:/tmp/piiwii-uefi.sock
+          printf 'info status\nscreendump %s/screenshots/uefi.ppm\n' "$GITHUB_WORKSPACE" | socat - UNIX-CONNECT:/tmp/piiwii-uefi.sock
           convert screenshots/uefi.ppm screenshots/uefi.png
           file screenshots/uefi.png
           kill "$(cat /tmp/piiwii-uefi.pid)" || true
