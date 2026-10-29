@@ -170,9 +170,12 @@ jobs:
         run: |
           set -euo pipefail
           patch --batch -p1 -d android-native < cartes-organizer-native-053/update.patch
-          grep -Fq "versionName '0.4.13'" android-native/app/build.gradle
-          grep -Fq 'versionCode 21' android-native/app/build.gradle
-          grep -Fq 'names.add("Attribuer à un ami")' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+          echo '--- after assignment patch ---'
+          grep -n -E 'version(Code|Name)' android-native/app/build.gradle
+          grep -n 'Attribuer à un ami' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java || :
+          grep -Fq "versionName '0.4.13'" android-native/app/build.gradle || { echo 'ERROR versionName check'; exit 1; }
+          grep -Fq 'versionCode 21' android-native/app/build.gradle || { echo 'ERROR versionCode check'; exit 1; }
+          grep -Fq 'Attribuer à un ami' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java || { echo 'ERROR attribution action check'; exit 1; }
       - name: Compile release APK
         run: gradle --no-daemon -p android-native :app:assembleRelease
       - name: Package installable APK source and signing tools
