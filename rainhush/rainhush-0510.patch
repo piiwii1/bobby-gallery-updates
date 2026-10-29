@@ -1,0 +1,523 @@
+diff --git a/windows/Cargo.toml b/windows/Cargo.toml
+--- a/windows/Cargo.toml
++++ b/windows/Cargo.toml
+@@ -1,7 +1,7 @@
+ [package]
+ name = "snowhush"
+-version = "0.5.9"
++version = "0.5.10"
+ edition = "2024"
+ publish = false
+ autobins = false
+ 
+diff --git a/windows/src/app.rs b/windows/src/app.rs
+--- a/windows/src/app.rs
++++ b/windows/src/app.rs
+@@ -18,8 +18,9 @@
+ };
+ use windows::Win32::UI::WindowsAndMessaging::*;
+ use windows::core::{PCWSTR, Result, w};
+ 
++use crate::glass::{self, Glass};
+ use crate::log;
+ use crate::prefs::{self, Settings};
+ use crate::snow::{self, Command, Links};
+ use crate::update::{self, Release};
+@@ -39,8 +40,12 @@
+ const ID_QUIT: u32 = 299;
+ const ID_UPDATES: u32 = 206;
+ const ID_CLEAR: u32 = 207;
+ const ID_ENABLED: u32 = 208;
++const ID_GLASS: u32 = 209;
++const WM_GLASS: u32 = WM_APP + 3;
++const WM_GLASS_POUR: u32 = WM_APP + 4;
++const TIMER_GLASS: usize = 3;
+ const TIMER_WELCOME: usize = 1;
+ const TIMER_UPDATES: usize = 2;
+ const WM_UPDATE: u32 = WM_APP + 2;
+ /// The shell's message for a click on the tray notification.
+@@ -54,8 +59,9 @@
+     commands: Sender<Command>,
+     wake: HANDLE,
+     snow: Option<JoinHandle<()>>,
+     icon: HICON,
++    glass: Glass,
+     locked: bool,
+     display_off: bool,
+     away: bool,
+     /// The download of the update the tray last announced.
+@@ -89,15 +95,17 @@
+         let links = Links { wake: wake.0 as isize, controller: window.0 as isize };
+         let snow = thread::Builder::new().name("snow".into()).spawn(move || snow::run(receiver, links, settings)).ok();
+         let icon = tray_icon();
+         add_tray_icon(window, icon, settings.enabled);
++        glass::shortcut(settings.enabled && settings.snowfall != Snowfall::Off);
++        SetTimer(Some(window), TIMER_GLASS, 1100, None);
+         let _ = WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION);
+         let _ = RegisterPowerSettingNotification(HANDLE(window.0), &GUID_CONSOLE_DISPLAY_STATE, DEVICE_NOTIFY_WINDOW_HANDLE);
+         if !settings.welcomed {
+             SetTimer(Some(window), TIMER_WELCOME, 1200, None);
+         }
+         // Independent Rainhush: upstream snow updates disabled.
+-        APP.set(Some(App { settings, commands, wake, snow, icon, locked: false, display_off: false, away: false, update: None }));
++        APP.set(Some(App { settings, commands, wake, snow, icon, glass: Glass::new(), locked: false, display_off: false, away: false, update: None }));
+ 
+         let mut message = MSG::default();
+         while GetMessageW(&mut message, None, 0, 0).as_bool() {
+             let _ = TranslateMessage(&message);
+@@ -121,8 +129,43 @@
+                 && let Some(url) = APP.with_borrow(|app| app.as_ref().and_then(|app| app.update.clone()))
+             {
+                 update::open(&url);
+             }
++            LRESULT(0)
++        }
++        WM_GLASS => {
++            APP.with_borrow_mut(|state| {
++                if let Some(app) = state.as_mut() {
++                    app.glass.toggle(window, app.settings.enabled && app.settings.snowfall != Snowfall::Off);
++                }
++            });
++            LRESULT(0)
++        }
++        WM_GLASS_POUR => {
++            APP.with_borrow_mut(|state| {
++                let Some(app) = state.as_mut() else {return;};
++                let Some((cursor, water)) = app.glass.pour() else {return;};
++                if water == 0 {return;}
++                let mut drops = Vec::with_capacity((water as usize) * 5);
++                for i in 0..(water as usize * 5) {
++                    let k = i as f32;
++                    drops.push(crate::snow::Piece {
++                        x: cursor.x as f32 + 8.0 + k * 1.6,
++                        y: cursor.y as f32 + 18.0 + (k % 4.0) * 2.0,
++                        velocity: snowhush::geometry::V2::new(130.0 + (k % 5.0) * 14.0, -180.0 - k * 8.0),
++                        color: [0.27, 0.68, 1.0],
++                    });
++                }
++                send(app, Command::Scatter(drops));
++            });
++            LRESULT(0)
++        }
++        WM_TIMER if wparam.0 == TIMER_GLASS => {
++            APP.with_borrow_mut(|state| {
++                if let Some(app) = state.as_mut() {
++                    app.glass.step();
++                }
++            });
+             LRESULT(0)
+         }
+         WM_WTSSESSION_CHANGE => {
+             update(|app| match wparam.0 as u32 {
+@@ -226,8 +269,14 @@
+         Some(enabled)
+     });
+     if let Some(enabled) = enabled {
+         update_tray_tip(window, enabled);
++        APP.with_borrow_mut(|state| {
++            if let Some(app) = state.as_mut() {
++                if !enabled { app.glass.stop(); }
++                glass::shortcut(enabled && app.settings.snowfall != Snowfall::Off);
++            }
++        });
+         log!("tray snow toggle: {}", if enabled { "ON" } else { "OFF" });
+     }
+ }
+ 
+@@ -244,8 +293,10 @@
+         let current = Snowfall::ALL.iter().position(|&s| s == settings.snowfall).unwrap_or(0) as u32;
+         let _ = CheckMenuRadioItem(snowfall, ID_SNOWFALL, ID_SNOWFALL + 4, ID_SNOWFALL + current, MF_BYCOMMAND.0);
+         let checked = |on: bool| if on { MF_CHECKED } else { MF_UNCHECKED };
+         let _ = AppendMenuW(menu, MF_STRING | checked(settings.enabled), ID_ENABLED as usize, w!("Pluie : ON / OFF"));
++        let glass_on = APP.with_borrow(|state| state.as_ref().is_some_and(|app| app.glass.active));
++        let _ = AppendMenuW(menu, MF_STRING | checked(glass_on), ID_GLASS as usize, w!("Verre d'eau : prendre / poser"));
+         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+         let _ = AppendMenuW(menu, MF_POPUP, snowfall.0 as usize, w!("Intensité de pluie"));
+         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+@@ -269,8 +320,13 @@
+     match chosen {
+         0 => {}
+         ID_QUIT => quit(window),
+         ID_ENABLED => toggle_snow(window),
++        ID_GLASS => APP.with_borrow_mut(|state| {
++            if let Some(app) = state.as_mut() {
++                app.glass.toggle(window, app.settings.enabled && app.settings.snowfall != Snowfall::Off);
++            }
++        }),
+         ID_UPDATES => check_for_updates(window, true),
+         ID_CLEAR => APP.with_borrow(|app| {
+             if let Some(app) = app {
+                 send(app, Command::ClearSnow(!prefs::animations_enabled()));
+@@ -310,8 +366,10 @@
+                     Command::Snowfall(snowfall)
+                 }
+             };
+             settings.save();
++            if settings.snowfall == Snowfall::Off { app.glass.stop(); }
++            glass::shortcut(settings.enabled && settings.snowfall != Snowfall::Off);
+             send(app, command);
+         }),
+     }
+ }
+@@ -385,10 +443,12 @@
+     }
+ }
+ 
+ fn quit(window: HWND) {
++    glass::shortcut(false);
+     remove_tray_icon(window);
+     if let Some(mut app) = APP.with_borrow_mut(Option::take) {
++        app.glass.stop();
+         send(&app, Command::Quit);
+         if let Some(snow) = app.snow.take() {
+             let _ = snow.join();
+         }
+diff --git a/windows/src/main.rs b/windows/src/main.rs
+--- a/windows/src/main.rs
++++ b/windows/src/main.rs
+@@ -1,8 +1,9 @@
+ #![windows_subsystem = "windows"]
+ 
+ mod app;
+ mod desktop;
++mod glass;
+ mod light;
+ mod log;
+ mod prefs;
+ mod render;
+@@ -19,9 +20,24 @@
+ 
+ fn main() {
+     // What "Uninstall" in Settings runs; it removes everything, even with Rainhush still running.
+     if std::env::args().skip(1).any(|argument| argument == "--uninstall") {
++        glass::shortcut(false);
+         snowhush::install::uninstall();
++        return;
++    }
++    // The temporary desktop shortcut launches a second process which signals
++    // the existing controller instead of opening a second overlay.
++    if std::env::args().skip(1).any(|argument| argument == "--glass") {
++        unsafe {
++            if let Ok(controller) = windows::Win32::UI::WindowsAndMessaging::FindWindowW(
++                w!("RainhushController"), None
++            ) {
++                let _=windows::Win32::UI::WindowsAndMessaging::PostMessageW(
++                    Some(controller), windows::Win32::UI::WindowsAndMessaging::WM_APP+3,
++                    windows::Win32::Foundation::WPARAM(0),windows::Win32::Foundation::LPARAM(0));
++            }
++        }
+         return;
+     }
+     unsafe {
+         let _instance = CreateMutexW(None, true, w!("Local\\Rainhush"));
+diff --git a/windows/src/simulation.rs b/windows/src/simulation.rs
+--- a/windows/src/simulation.rs
++++ b/windows/src/simulation.rs
+@@ -355,9 +355,9 @@
+         x * x * (3.0 - 2.0 * x)
+     }
+ 
+     fn puddle_count(&self) -> usize {
+-        [30.0, 82.0].into_iter().filter(|&start| self.puddle_amount(start) > 0.001).count()
++        [18.0, 67.0].into_iter().filter(|&start| self.puddle_amount(start) > 0.001).count()
+     }
+ 
+     /// Floats the renderer needs per frame: each layer's surface and bed.
+     pub fn column_count(&self) -> usize {
+@@ -459,19 +459,25 @@
+             let t = mote.age / mote.life;
+             let fade = (mote.age / 0.06).min(1.0) * (1.0 - t).powf(1.5);
+             Sprite { position: mote.position, size: mote.size * (1.0 + t), alpha: mote.alpha * fade, soft: 1.0, tint: [1.0; 3], ..Sprite::default() }
+         });
+-        // The normal overlay ends at the top of the taskbar: no clicks are blocked.
+-        let puddles = [(0.16, 30.0, 0.0), (0.81, 82.0, 1.0)].into_iter().filter_map(|(fraction, start, phase)| {
++        // Irregular pools: asymmetric locations, dimensions, edges and arrival times.
++        // Their positions vary with each monitor's proportions; never aligned in a grid.
++        let variation = (self.width * 0.0217 + self.height * 0.0043).sin();
++        let first_x = self.width * (0.12 + variation * 0.055);
++        let second_x = self.width * (0.71 + (variation * 2.7 + 1.3).sin() * 0.16);
++        let puddles = [(first_x, 18.0, 0.0), (second_x, 67.0, 1.0)].into_iter().filter_map(|(x, start, style)| {
+             let amount = self.puddle_amount(start);
+             (amount > 0.001).then(|| Sprite {
+-                position: V2::new(self.width * fraction, 2.5),
+-                velocity: V2::new(32.0 + 74.0 * amount, 1.8 + 3.1 * amount),
++                // Coordinates point upwards from the top edge of the taskbar.
++                position: V2::new(x, if style < 0.5 { 11.0 } else { 15.0 }),
++                velocity: V2::new((90.0 + (160.0 + style * 125.0) * amount).min(self.width * 0.29),
++                                  (14.0 + (14.0 + 11.0 * style) * amount)),
+                 size: 1.0,
+-                alpha: amount * (0.22 + 0.055 * phase),
+-                tint: [0.40, 0.70, 0.95],
++                alpha: amount * (if style < 0.5 { 0.78 } else { 0.68 }),
++                tint: [0.31, 0.64, 0.91],
+                 tint_amount: 1.0,
+-                lump: -1.0,
++                lump: -1.0 - style,
+                 ..Sprite::default()
+             })
+         });
+         let mut count = 0;
+diff --git a/windows/src/shaders.hlsl b/windows/src/shaders.hlsl
+--- a/windows/src/shaders.hlsl
++++ b/windows/src/shaders.hlsl
+@@ -53,9 +53,9 @@
+         puddle.radius = 0.5;
+         puddle.alpha = saturate(s.alpha);
+         puddle.soft = 1.0;
+         puddle.tint = float4(s.tintColor, s.tintAmount);
+-        puddle.lump = -1.0;
++        puddle.lump = s.lump;
+         puddle.spin = 0.0;
+         return puddle;
+     }
+     float pixels = s.size * scale;
+@@ -83,20 +83,23 @@
+ }
+ 
+ float4 spriteFragment(SpriteOut i) : SV_Target {
+     if (i.lump < 0.0) {
+-        float2 p = float2(i.coord.x - 0.5, 0.5 - i.coord.y);
+-        float2 axes = max(i.streak * 0.5, float2(0.001, 0.001));
+-        float2 q = p / axes;
+-        float r = length(q);
+-        float softEdge = 1.0 - smoothstep(0.78, 1.0, r);
+-        if (softEdge < 0.002) discard;
+-        float edge = smoothstep(0.72, 0.98, r);
+-        float shimmer = 0.5 + 0.5 * sin(time * 0.75 + q.x * 9.0);
+-        float gleam = pow(saturate(1.0 - abs(q.y - 0.29) * 3.2), 8.0) * (0.12 + shimmer * 0.1);
+-        float3 water = lerp(float3(0.22, 0.39, 0.58), float3(0.61, 0.81, 0.97), edge * 0.48 + gleam);
++        float2 q = float2((i.coord.x - 0.5) * 2.0, (0.5 - i.coord.y) * 2.0);
++        // Side lobes make a pool uneven, not a perfectly straight oval.
++        float angle = atan2(q.y, q.x);
++        float style = -i.lump;
++        float r = length(q) * (1.0 + 0.075 * sin(angle * 5.0 + style * 2.7)
++                                  + 0.065 * sin(angle * 9.0 + style * 4.3));
++        float outer = 1.0 - smoothstep(0.87, 1.0, r);
++        if (outer < 0.003) discard;
++        float rim = smoothstep(0.72, 0.97, r);
++        float shimmer = 0.5 + 0.5 * sin(time * 1.1 + q.x * 8.0 + style);
++        float highlight = smoothstep(0.9, 0.3, abs(q.y - 0.45))
++                        * smoothstep(0.95, 0.3, abs(q.x + 0.13)) * shimmer;
++        float3 water = lerp(float3(0.15, 0.32, 0.51), float3(0.63, 0.85, 1.0), 0.48 * rim + 0.19 * highlight);
+         water *= light.rgb;
+-        float a = i.alpha * softEdge * (0.83 + 0.17 * edge);
++        float a = i.alpha * outer * (0.71 + rim * 0.29);
+         return float4(water * a, a);
+     }
+     // Quad coordinates run down the screen; velocities run up.
+     float2 p = float2(i.coord.x - 0.5, 0.5 - i.coord.y);
+diff --git a/windows/src/glass.rs b/windows/src/glass.rs
+new file mode 100644
+--- /dev/null
++++ b/windows/src/glass.rs
+@@ -0,0 +1,209 @@
++//! PiiWii Rainhush water glass: transient desktop shortcut, live rain-filled cursor,
++//! and right-click to pour. All shell and cursor changes are cleaned up on exit.
++use std::ffi::c_void;
++use std::os::windows::ffi::OsStrExt;
++use std::path::{Path, PathBuf};
++use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
++
++use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
++use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree, IPersistFile};
++use windows::Win32::UI::Shell::{FOLDERID_Desktop, IShellLinkW, KF_FLAG_CREATE, SHGetKnownFolderPath, ShellLink};
++use windows::Win32::UI::WindowsAndMessaging::{
++    CallNextHookEx, GetCursorPos, HHOOK, IMAGE_CURSOR, LR_LOADFROMFILE, LoadImageW, OCR_NORMAL,
++    SPI_SETCURSORS, SetSystemCursor, SetWindowsHookExW, SystemParametersInfoW,
++    SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, UnhookWindowsHookEx, WH_MOUSE_LL, WM_APP, WM_RBUTTONDOWN, PostMessageW,
++};
++use windows::core::{Interface, PCWSTR, w};
++
++static CONTROLLER: AtomicIsize = AtomicIsize::new(0);
++static CATCH_RIGHT: AtomicBool = AtomicBool::new(false);
++const POUR_MESSAGE: u32 = WM_APP + 4;
++
++fn wide(s: &std::ffi::OsStr) -> Vec<u16> { s.encode_wide().chain([0]).collect() }
++fn storage() -> PathBuf { std::env::temp_dir().join("Rainhush-PiiWii-Glass") }
++
++fn desktop_shortcut() -> Option<PathBuf> {
++    unsafe {
++        let ptr = SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_CREATE, None).ok()?;
++        let text = ptr.to_string().ok();
++        CoTaskMemFree(Some(ptr.0 as *const c_void));
++        text.map(|dir| PathBuf::from(dir).join("Verre d'eau - Rainhush.lnk"))
++    }
++}
++
++/// Store a real Explorer desktop icon only while the rain is active.
++pub fn shortcut(raining: bool) {
++    let Some(at) = desktop_shortcut() else { return };
++    if !raining {
++        let _ = std::fs::remove_file(at);
++        return;
++    }
++    let Ok(exe) = std::env::current_exe() else { return };
++    let _ = std::fs::create_dir_all(storage());
++    let icon = storage().join("verre-eau.ico");
++    let _ = std::fs::write(&icon, image_file(7, false, false));
++    let exew = wide(exe.as_os_str());
++    let iconw = wide(icon.as_os_str());
++    let atw = wide(at.as_os_str());
++    unsafe {
++        let result = (|| -> windows::core::Result<()> {
++            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
++            link.SetPath(PCWSTR(exew.as_ptr()))?;
++            link.SetArguments(w!("--glass"))?;
++            link.SetDescription(w!("Verre d'eau Rainhush : remplir sous la pluie, clic droit pour verser"))?;
++            link.SetIconLocation(PCWSTR(iconw.as_ptr()), 0)?;
++            link.cast::<IPersistFile>()?.Save(PCWSTR(atw.as_ptr()), true)
++        })();
++        if let Err(error) = result { crate::log!("glass shortcut: {error}"); }
++    }
++}
++
++/// Source artwork is generated as a 48x48 32-bit BGRA icon or cursor. No external assets.
++fn image_file(fill: u8, tilted: bool, cursor: bool) -> Vec<u8> {
++    const N: usize = 48;
++    let mut pixels = Vec::with_capacity(N*N*4);
++    let theta: f32 = if tilted { -0.64 } else { 0.0 };
++    let c = theta.cos();
++    let s = theta.sin();
++    for y in (0..N).rev() {
++        for x in 0..N {
++            let xx = x as f32 - 24.0;
++            let yy = y as f32 - 22.0;
++            let px = xx*c + yy*s + 24.0;
++            let py = -xx*s + yy*c + 22.0;
++            let mut b = 0u8; let mut g = 0u8; let mut r = 0u8; let mut a = 0u8;
++            let mouth = (px-24.0).powi(2)/140.0 + (py-9.0).powi(2)/13.0;
++            let edge_left = 12.5 + (py-9.0)*0.055;
++            let edge_right = 35.5 - (py-9.0)*0.055;
++            let body = py >= 10.0 && py <= 37.0 && px >= edge_left && px <= edge_right;
++            let inside = py >= 11.5 && py <= 36.0 && px > edge_left+2.0 && px < edge_right-2.0;
++            if body {
++                (b,g,r,a) = (178, 139, 108, 185);
++                if inside { (b,g,r,a) = (210, 202, 190, 62); }
++                if inside && py >= 37.0 - (fill as f32/10.0)*25.0 {
++                    (b,g,r,a) = (255, 175 + (px as u8 % 15), 32, 218);
++                    if ((px-20.0).powi(2)+(py-17.0).powi(2)) < 5.0 { (b,g,r,a)=(255,236,149,235); }
++                }
++                if px < edge_left+2.4 || px > edge_right-2.4 || py > 34.8 {
++                    (b,g,r,a)=(188,148,116,239);
++                }
++            }
++            if mouth <= 1.0 && (mouth >= 0.51 || py < 8.7) { (b,g,r,a)=(233,219,204,255); }
++            if py >= 38.0 && py <= 40.0 && (px-24.0).abs() < 11.0 { (b,g,r,a)=(200,170,145,221); }
++            if tilted && x > 36 && y > 15 && y < 32 && (x + 2*y)%7 < 3 {
++                (b,g,r,a)=(250,159,25,225);
++            }
++            pixels.extend_from_slice(&[b,g,r,a]);
++        }
++    }
++    // ICO/CUR with BITMAPINFOHEADER and a standard 1-bit transparency mask.
++    let mut data=Vec::new();
++    data.extend_from_slice(&40u32.to_le_bytes());
++    data.extend_from_slice(&(N as i32).to_le_bytes());
++    data.extend_from_slice(&((2*N) as i32).to_le_bytes());
++    data.extend_from_slice(&1u16.to_le_bytes());
++    data.extend_from_slice(&32u16.to_le_bytes());
++    data.extend_from_slice(&0u32.to_le_bytes());
++    data.extend_from_slice(&((N*N*4) as u32).to_le_bytes());
++    data.extend_from_slice(&[0u8;16]);
++    data.extend_from_slice(&pixels);
++    for row in 0..N {
++        for byte in 0..8usize {
++            let mut mask=0u8;
++            for bit in 0..8 { let col=byte*8+bit; if col < N && pixels[(row*N+col)*4+3] == 0 { mask |= 1 << (7-bit); } }
++            data.push(mask);
++        }
++    }
++    let mut file=Vec::new();
++    file.extend_from_slice(&0u16.to_le_bytes());
++    file.extend_from_slice(&(if cursor {2u16} else {1u16}).to_le_bytes());
++    file.extend_from_slice(&1u16.to_le_bytes());
++    file.extend_from_slice(&[48u8,48u8,0u8,0u8]);
++    file.extend_from_slice(&(if cursor {23u16} else {1u16}).to_le_bytes());
++    file.extend_from_slice(&(if cursor {10u16} else {32u16}).to_le_bytes());
++    file.extend_from_slice(&(data.len() as u32).to_le_bytes());
++    file.extend_from_slice(&22u32.to_le_bytes());
++    file.extend_from_slice(&data);
++    file
++}
++
++unsafe extern "system" fn mouse_hook(code:i32,wp:WPARAM,lp:LPARAM) -> LRESULT {
++    if code >= 0 && wp.0 as u32 == WM_RBUTTONDOWN && CATCH_RIGHT.load(Ordering::Relaxed) {
++        let hwnd=CONTROLLER.load(Ordering::Relaxed);
++        if hwnd != 0 {
++            let _=unsafe { PostMessageW(Some(HWND(hwnd as _)), POUR_MESSAGE, WPARAM(0), LPARAM(0)) };
++            return LRESULT(1);
++        }
++    }
++    unsafe { CallNextHookEx(None, code, wp, lp) }
++}
++
++fn restore_pointer() {
++    unsafe { let _ = SystemParametersInfoW(SPI_SETCURSORS, 0, None, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0)); }
++}
++
++fn cursor(level:u8, tilted:bool) {
++    let _=std::fs::create_dir_all(storage());
++    let path=storage().join(format!("glass-{}-{}.cur", level, if tilted {1} else {0}));
++    if std::fs::write(&path, image_file(level, tilted, true)).is_err() { return; }
++    let pathw=wide(path.as_os_str());
++    unsafe {
++        if let Ok(handle)=LoadImageW(None, PCWSTR(pathw.as_ptr()), IMAGE_CURSOR, 48,48,LR_LOADFROMFILE) {
++            // SetSystemCursor assumes ownership; never DestroyCursor(handle) afterwards.
++            let _=SetSystemCursor(windows::Win32::UI::WindowsAndMessaging::HCURSOR(handle.0),OCR_NORMAL);
++        }
++    }
++}
++
++pub struct Glass {
++    pub active: bool,
++    pub level: u8,
++    hook: Option<HHOOK>,
++    tilted_ticks: u8,
++}
++impl Glass {
++    pub fn new()->Glass { Glass { active:false,level:0,hook:None,tilted_ticks:0 } }
++    pub fn toggle(&mut self, controller:HWND, raining:bool) {
++        if !raining { self.stop(); return; }
++        if self.active { self.stop(); return; }
++        self.active=true;
++        self.level=0;
++        self.tilted_ticks=0;
++        CONTROLLER.store(controller.0 as isize,Ordering::Relaxed);
++        CATCH_RIGHT.store(true,Ordering::Relaxed);
++        unsafe {
++            if let Ok(hook)=SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook), None, 0) { self.hook=Some(hook); }
++        }
++        cursor(0,false);
++    }
++    pub fn step(&mut self) {
++        if !self.active {return;}
++        if self.tilted_ticks>0 {
++            self.tilted_ticks-=1;
++            if self.tilted_ticks==0 { cursor(0,false); }
++        } else if self.level<10 {
++            self.level+=1;
++            cursor(self.level,false);
++        }
++    }
++    /// Returns the mouse coordinates and amount of water, if the glass had water.
++    pub fn pour(&mut self) -> Option<(POINT, u8)> {
++        if !self.active {return None;}
++        let mut p=POINT::default();
++        unsafe {let _=GetCursorPos(&mut p);}
++        let amount=self.level;
++        self.level=0;
++        self.tilted_ticks=1;
++        cursor(0,true);
++        Some((p,amount))
++    }
++    pub fn stop(&mut self) {
++        if !self.active {return;}
++        self.active=false;
++        CATCH_RIGHT.store(false,Ordering::Relaxed);
++        CONTROLLER.store(0,Ordering::Relaxed);
++        if let Some(h)=self.hook.take() { unsafe {let _=UnhookWindowsHookEx(h);} }
++        restore_pointer();
++    }
++}
++impl Drop for Glass {fn drop(&mut self){self.stop();}}
