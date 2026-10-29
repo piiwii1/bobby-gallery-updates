@@ -36,12 +36,10 @@ jobs:
         shell: pwsh
         run: python rainhush/patch_rainhush_puddles.py snowhush
 
-      - name: Apply glass cursor and irregular water pools
+      - name: Apply complete rain and glass sources (Windows)
         shell: pwsh
         run: |
-          python -c 'from pathlib import Path; base=Path("snowhush/windows"); names=["Cargo.toml","src/app.rs","src/main.rs","src/simulation.rs","src/shaders.hlsl"]; [(base/n).write_bytes((base/n).read_bytes().replace(bytes([13,10]),bytes([10]))) for n in names]'
-          git -C snowhush apply --whitespace=nowarn ../rainhush/rainhush-0510.patch
-
+          python -c 'import base64,zlib,json; from pathlib import Path; data=json.loads(zlib.decompress(base64.b64decode(Path("rainhush/rainhush-0510-sources.b64").read_text()))); [(Path("snowhush")/k).write_text(v,encoding="utf-8") for k,v in data.items()]; print("restored",len(data),"Windows source files")'
       - name: Install Rust Windows toolchain
         shell: pwsh
         run: |
@@ -75,6 +73,7 @@ jobs:
           Copy-Item rainhush\patch_rainhush.py dist\sources\patch_rainhush.py
           Copy-Item rainhush\patch_rainhush_puddles.py dist\sources\patch_rainhush_puddles.py
           Copy-Item rainhush\rainhush-0510.patch dist\sources\rainhush-0510.patch
+          Copy-Item rainhush\rainhush-0510-sources.b64 dist\sources\rainhush-0510-sources.b64
           Copy-Item snowhush\windows\target\x86_64-pc-windows-msvc\release\Snowhush-Setup.exe dist\Rainhush-PiiWii-0.5.10-Setup.exe
           Copy-Item snowhush\windows\target\x86_64-pc-windows-msvc\release\Snowhush.exe dist\Rainhush-PiiWii-0.5.10.exe
           Compress-Archive -Path dist\sources -DestinationPath dist\Rainhush-PiiWii-0.5.10-Sources.zip -CompressionLevel Optimal
