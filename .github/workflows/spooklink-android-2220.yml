@@ -348,6 +348,21 @@ jobs:
           assert 'v2.22.0' in j and '/v2/assets/delete' in j
           print('Source version 2.22.0',len(j))
           PY
+      - name: Load image thumbnails in background to keep Android responsive
+        run: |
+          python3 - <<'PY'
+          import base64,lzma,subprocess
+          from pathlib import Path
+          src=Path('android/app/src/main/java/ch/piiwii/spooklink/MainActivity.java')
+          Path('a.java').write_bytes(src.read_bytes())
+          data=Path('spooklink2/android/v2.22.0/thumbnails.diff.xz.b64').read_text().strip()
+          Path('thumb222.diff').write_bytes(lzma.decompress(base64.b64decode(data)))
+          subprocess.run(['patch','-p0','-i','thumb222.diff'],check=True)
+          src.write_bytes(Path('a.java').read_bytes())
+          j=src.read_text()
+          assert 'thumbnailsIo' in j and 'MAX_EDGE=1600' in j
+          print('Responsive gallery 2.22.0 ready',len(j))
+          PY
       - name: Compile release APK
         working-directory: android
         run: gradle :app:assembleRelease --no-daemon
