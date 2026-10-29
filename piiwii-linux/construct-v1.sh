@@ -20,6 +20,7 @@ cleanup() {
     cp -a "$WORK/resolv.conf.orig" "$ROOT/etc/resolv.conf"
   fi
   if [[ -e "$ROOT/usr/sbin/policy-rc.d" ]]; then rm -f "$ROOT/usr/sbin/policy-rc.d"; fi
+  set -e
 }
 trap cleanup EXIT
 echo '[1/8] Installer les outils et verifier l espace disque'
