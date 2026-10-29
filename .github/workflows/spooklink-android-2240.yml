@@ -392,7 +392,7 @@ jobs:
           # 32-line layout difference. Insert the new independent import screen
           # at the stable method anchor, without relying on this patch hunk's context.
           import re
-          hunk=re.search(r'(?ms)^@@ -1044,6 \\+1069,58 @@.*?(?=^@@ |^--- a/|\\Z)',patch_text)
+          hunk=re.search(r'(?ms)^@@ -1044,6 \+1069,58 @@.*?(?=^@@ |^--- a/|\Z)',patch_text)
           assert hunk, 'Import screen hunk missing'
           additions=''.join(line[1:] for line in hunk.group().splitlines(keepends=True) if line.startswith('+'))
           patch_text=patch_text[:hunk.start()]+patch_text[hunk.end():]
