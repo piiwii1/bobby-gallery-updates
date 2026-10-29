@@ -144,7 +144,7 @@ jobs:
           s=p.read_text()
           before='private volatile boolean connected=false;'
           assert before in s
-          s=s.replace(before,before+'\\n    private int heartbeatFailures=0;',1)
+          s=s.replace(before,before+chr(10)+'    private int heartbeatFailures=0;',1)
           old='showConnection(true,ack.optString("name",address));status("",true);'
           assert old in s
           s=s.replace(old,'heartbeatFailures=0;'+old,1)
