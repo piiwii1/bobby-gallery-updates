@@ -282,9 +282,9 @@
 +            // We rasterize on a transparent canvas; output BGRA with straight alpha.
 +            let opacity=aa*m;
 +            let denom=aa.max(0.0001);
-+            let r=(rr/denom*255.0).clamp(0.0,255.0) as u8;
-+            let g=(gg/denom*255.0).clamp(0.0,255.0) as u8;
-+            let b=(bb/denom*255.0).clamp(0.0,255.0) as u8;
++            let r=(rr/denom).clamp(0.0,255.0) as u8;
++            let g=(gg/denom).clamp(0.0,255.0) as u8;
++            let b=(bb/denom).clamp(0.0,255.0) as u8;
 +            pixels.extend_from_slice(&[b,g,r,(opacity*255.0).clamp(0.0,255.0) as u8]);
 +        }
 +    }
