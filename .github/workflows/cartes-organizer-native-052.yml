@@ -162,6 +162,8 @@ jobs:
           patch --batch -p1 -d android-native < /tmp/co052.patch
           grep -Fq "versionName '0.4.12'" android-native/app/build.gradle
           grep -Fq 'versionCode 20' android-native/app/build.gradle
+          patch --batch -p1 -d android-native < cartes-organizer-native-052/preview.patch
+          grep -Fq 'preview.addView(blackRim,inner)' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           grep -Fq '"template","legacy-exe-60px-v1"' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
       - name: Compile release APK
         run: gradle --no-daemon -p android-native :app:assembleRelease
