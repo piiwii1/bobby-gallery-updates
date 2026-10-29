@@ -1,0 +1,28 @@
+name: PiiWii Turbo Linux - Inspect VM screen captures
+on:
+  push:
+    branches: [piiwii-linux-iso-visual-20261029]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  screens:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Read boot screenshots for inspection
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p images
+          gh run download 40911362179 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-BIOS-UEFI-boot-screenshots --dir images
+          ls -lah images
+          echo "IMAGE_BIOS_START"
+          base64 -w0 images/bios.png
+          echo
+          echo "IMAGE_BIOS_END"
+          echo "IMAGE_UEFI_START"
+          base64 -w0 images/uefi.png
+          echo
+          echo "IMAGE_UEFI_END"
