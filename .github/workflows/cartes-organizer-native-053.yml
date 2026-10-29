@@ -166,16 +166,34 @@ jobs:
           patch --batch -p1 -d android-native < cartes-organizer-native-052/preview.patch
           grep -Fq 'preview.addView(blackRim,inner)' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           grep -Fq '"template","legacy-exe-60px-v1"' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
-      - name: Restore friend assignment from WordPress and refresh the correct tab
+      - name: Repair attribution without blocking on WhatsApp
         run: |
           set -euo pipefail
-          patch --batch -p1 -d android-native < cartes-organizer-native-053/update.patch
-          echo '--- after assignment patch ---'
-          grep -n -E 'version(Code|Name)' android-native/app/build.gradle
-          grep -n 'Attribuer à un ami' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java || :
-          grep -Fq "versionName '0.4.13'" android-native/app/build.gradle || { echo 'ERROR versionName check'; exit 1; }
-          grep -Fq 'versionCode 21' android-native/app/build.gradle || { echo 'ERROR versionCode check'; exit 1; }
-          grep -Fq 'Attribuer à un ami' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java || { echo 'ERROR attribution action check'; exit 1; }
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java')
+          s=p.read_text()
+          def replace_once(old,new):
+              global s
+              assert s.count(old)==1,(old,s.count(old))
+              s=s.replace(old,new,1)
+          replace_once('if("pending".equals(role)){','if("pending".equals(role) && c.optBoolean("has_frame") && ("pending".equals(c.optString("stage")) || "assigned".equals(c.optString("stage")))){')
+          replace_once('names.add("Attribuer et préparer WhatsApp");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->assignAndShare(c,f,s))));',
+                       'names.add("Attribuer à un ami");commands.add(()->pickSlot(-1,(f,s)->operation("assign","card_id",id,"friend_id",f,"slot_no",s)));')
+          replace_once('names.add("Attribuer sans partager");commands.add(()->pickSlot(-1,(f,s)->operation("assign","card_id",id,"friend_id",f,"slot_no",s)));',
+                       'names.add("Attribuer et partager sur WhatsApp");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->assignAndShare(c,f,s))));')
+          replace_once('shareToWhatsApp(card,null,friendId);\n        });','shareToWhatsApp(card,null,friendId);\n            refresh();\n        });')
+          replace_once('page="overview";archives=false;refresh();\n        });\n    }\n    private String encode','refresh();\n        });\n    }\n    private String encode')
+          s=s.replace('Android 0.4.10','Android 0.4.13')
+          p.write_text(s)
+          p=Path('android-native/app/build.gradle')
+          s=p.read_text()
+          assert s.count('versionCode 20')==1
+          assert s.count("versionName '0.4.12'")==1
+          p.write_text(s.replace('versionCode 20','versionCode 21').replace("versionName '0.4.12'","versionName '0.4.13'"))
+          PY
+          grep -Fq "versionName '0.4.13'" android-native/app/build.gradle
+          grep -Fq 'names.add("Attribuer à un ami")' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
       - name: Compile release APK
         run: gradle --no-daemon -p android-native :app:assembleRelease
       - name: Package installable APK source and signing tools
