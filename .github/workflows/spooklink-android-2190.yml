@@ -276,6 +276,8 @@ jobs:
           # Decode a literal linebreak in the generated Java source, not a backslash-n.
           java=java.replace('messagePng;\\n        final boolean','messagePng;'+chr(10)+'        final boolean')
           java=java.replace('playSound;\\n        final int','playSound;'+chr(10)+'        final int')
+          # Keep Java source free of literal backslash-n introduced by YAML escaping.
+          java=java.replace(chr(92)+'n        final int playVolume=',chr(10)+'        final int playVolume=')
           src.write_text(java)
           gradle=Path('android/app/build.gradle')
           g=gradle.read_text()
