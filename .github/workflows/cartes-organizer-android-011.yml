@@ -1,0 +1,53 @@
+name: Cartes Organizer Android 0.1.1 (WordPress 0.3.8)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cartes-organizer-android/**'
+      - '.github/workflows/cartes-organizer-android-011.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install SDK 35
+        run: |
+          yes | sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+      - name: Compile native app
+        run: gradle --no-daemon -p cartes-organizer-android :app:assembleDebug
+      - name: Deliver installable APK and sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp cartes-organizer-android/app/build/outputs/apk/debug/app-debug.apk dist/Cartes-Organizer-Android-0.1.1.apk
+          (cd cartes-organizer-android && zip -qr ../dist/Cartes-Organizer-Android-0.1.1-sources.zip . -x '*/build/*' '.gradle/*')
+          sha256sum dist/*.apk > dist/SHA256-APK.txt
+          echo 'versionName=0.1.1' > dist/VERSION.txt
+          echo 'versionCode=2' >> dist/VERSION.txt
+          echo 'pluginVersion=0.3.8' >> dist/VERSION.txt
+          echo 'build=debug-signed' >> dist/VERSION.txt
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cartes-Organizer-Android-0.1.1
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
