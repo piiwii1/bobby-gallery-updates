@@ -86,6 +86,17 @@ jobs:
           grep -Fq "versionName '0.4.6'" android-native/app/build.gradle
           grep -Fq 'normalizePhone' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           grep -Fq 'shareToWhatsApp' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+      - name: Restore the 0.4.7 WhatsApp transfer changes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,zlib
+          blob=Path('cartes-organizer-native-047/reconstructed.patch.zlib.b64').read_text().strip()
+          Path('/tmp/co047.patch').write_bytes(zlib.decompress(base64.b64decode(blob)))
+          PY
+          patch --batch -p1 -d android-native < /tmp/co047.patch
+          grep -Fq "versionName '0.4.7'" android-native/app/build.gradle
       - name: Apply standard Android media share repair
         run: |
           set -euo pipefail
