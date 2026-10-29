@@ -34,7 +34,7 @@ jobs:
             -cdrom input/PiiWii-Turbo-Linux-0.9.0-TEST.iso -boot order=d \
             -display none -monitor unix:/tmp/piiwii-bios.sock,server,nowait \
             -pidfile /tmp/piiwii-bios.pid -daemonize
-          sleep 105
+          sleep 210
           printf 'info status\nscreendump %s/screenshots/bios.ppm\n' "$GITHUB_WORKSPACE" | socat - UNIX-CONNECT:/tmp/piiwii-bios.sock
           convert screenshots/bios.ppm screenshots/bios.png
           file screenshots/bios.png
@@ -53,7 +53,9 @@ jobs:
             -cdrom input/PiiWii-Turbo-Linux-0.9.0-TEST.iso -boot order=d \
             -display none -monitor unix:/tmp/piiwii-uefi.sock,server,nowait \
             -pidfile /tmp/piiwii-uefi.pid -daemonize
-          sleep 105
+          sleep 15
+          printf 'sendkey ret\n' | socat - UNIX-CONNECT:/tmp/piiwii-uefi.sock
+          sleep 210
           printf 'info status\nscreendump %s/screenshots/uefi.ppm\n' "$GITHUB_WORKSPACE" | socat - UNIX-CONNECT:/tmp/piiwii-uefi.sock
           convert screenshots/uefi.ppm screenshots/uefi.png
           file screenshots/uefi.png
