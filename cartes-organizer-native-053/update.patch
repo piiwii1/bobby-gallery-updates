@@ -22,7 +22,7 @@
          ScrollView scroll=new ScrollView(this);scroll.addView(panel);dialog.setContentView(scroll);
          dialog.show();Window window=dialog.getWindow();if(window!=null){window.setBackgroundDrawableResource(android.R.color.transparent);window.setLayout(dp(302),-1);window.setGravity(Gravity.TOP|Gravity.LEFT);window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);window.setDimAmount(.48f);}
      }
-@@ -563,7 +563,7 @@
+@@ -563,6 +563,6 @@
          }root.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
      }
      private void renderSettings(){
@@ -44,7 +44,7 @@
          });
      }
      private String shareImageUrl(JSONObject card,JSONObject copy){
-@@ -1109,10 +1112,15 @@
+@@ -1109,9 +1112,14 @@
      private void showActions(JSONObject c,JSONObject copy,String role){
          final int id=c.optInt("id");
          ArrayList<String> names=new ArrayList<>();ArrayList<Runnable> commands=new ArrayList<>();
@@ -63,7 +63,7 @@
 +            names.add("Partager sans déplacer");commands.add(()->pickSlot(-1,(f,s)->ensureWhatsApp(f,()->shareToWhatsApp(c,null,f))));
          }
          if("original".equals(role)||"pending".equals(role)){names.add(c.optBoolean("has_frame")?"Modifier la bordure":"Créer une bordure");commands.add(()->frameDialog(c));}
-@@ -1176,7 +1184,7 @@
+@@ -1176,6 +1184,6 @@
          job(()->http(base()+"mobile/action","POST",payload,"application/x-www-form-urlencoded; charset=UTF-8"),out->{
              JSONObject response=new JSONObject(new String(out,StandardCharsets.UTF_8));
              if(!response.optBoolean("success"))throw new IOException(response.optJSONObject("data")==null?"Action refusée":response.optJSONObject("data").optString("message","Action refusée"));
