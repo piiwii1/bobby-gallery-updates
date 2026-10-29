@@ -2,18 +2,16 @@
 //! Reads public, read-only weather on https://piiwii.ch via HTTPS.
 //! No credentials, personal data or upload requests are involved.
 use std::ffi::c_void;
-use windows::Win32::Foundation::SYSTEMTIME;
 use windows::Win32::Networking::WinHttp::{
     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
     WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
     WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetTimeouts,
 };
-use windows::Win32::System::Time::GetLocalTime;
+use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::core::{PCWSTR, w};
 
 pub fn in_season() -> bool {
-    let mut now = SYSTEMTIME::default();
-    unsafe { GetLocalTime(&mut now) };
+    let now = unsafe { GetLocalTime() };
     now.wMonth >= 10 || now.wMonth <= 3
 }
 
