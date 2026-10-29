@@ -34,13 +34,13 @@ jobs:
           grep -q 'HorizontalScrollView pager' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           grep -q 'slotCooldownMillis' android-native/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
           if grep -R -q 'android.webkit.WebView' android-native/app/src/main; then exit 1; fi
-      - name: Build native debug APK to be re-signed with permanent key
-        run: gradle --no-daemon -p android-native :app:assembleDebug
+      - name: Build native release APK to be signed with permanent key
+        run: gradle --no-daemon -p android-native :app:assembleRelease
       - name: Deliver APK and signer utility
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp android-native/app/build/outputs/apk/debug/app-debug.apk dist/Cartes-Organizer-Android-0.4.3-temp.apk
+          cp android-native/app/build/outputs/apk/release/app-release-unsigned.apk dist/Cartes-Organizer-Android-0.4.3-unsigned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" dist/apksigner.jar
           (cd android-native && zip -qr ../dist/Cartes-Organizer-Android-0.4.3-sources.zip app/src/main app/build.gradle build.gradle settings.gradle)
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/Cartes-Organizer-Android-0.4.3-temp.apk | head -8 > dist/APK-INFO.txt
