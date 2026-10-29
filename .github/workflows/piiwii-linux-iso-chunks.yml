@@ -1,0 +1,94 @@
+name: PiiWii Turbo Linux - Transfer ISO in 400MiB parts
+on:
+  push:
+    branches: [piiwii-linux-iso-chunks-20261029]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Retrieve verified ISO from successful workflow run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p download/iso download/report parts
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-0.9.0-TEST-ISO --dir download/iso
+          gh run download 40904301035 --repo "${GITHUB_REPOSITORY}" --name PiiWii-Turbo-Linux-compilation-report --dir download/report
+          ISO=download/iso/PiiWii-Turbo-Linux-0.9.0-TEST.iso
+          SHA=download/report/dist/PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256
+          test -s "$ISO" && test -s "$SHA"
+          expected="$(awk '{print $1}' "$SHA")"
+          printf '%s  %s\n' "$expected" "$ISO" | sha256sum -c -
+          split -b 400M -d -a 2 "$ISO" parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-
+          cp "$SHA" parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256
+          echo "Chunks:"
+          ls -lah parts/
+          test "$(find parts -name 'PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-*' | wc -l)" -eq 7
+      - name: Upload ISO part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-00
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-00
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-01
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-01
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-02
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-02
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-03
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-03
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 04
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-04
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-04
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 05
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-05
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-05
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload ISO part 06
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-part-06
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.part-06
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - name: Upload original ISO SHA256
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiiWii-Turbo-Linux-ISO-SHA256
+          path: parts/PiiWii-Turbo-Linux-0.9.0-TEST.iso.sha256
+          retention-days: 3
+          if-no-files-found: error
