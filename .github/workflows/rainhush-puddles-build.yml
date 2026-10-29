@@ -1,0 +1,89 @@
+name: Rainhush PiiWii 0.5.9 - Puddles Windows
+
+on:
+  push:
+    branches:
+      - rainhush-puddles-20261029
+    paths:
+      - "rainhush/**"
+      - ".github/workflows/rainhush-puddles-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PiiWii build recipes
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            rainhush
+            .github/workflows/rainhush-puddles-build.yml
+
+      - name: Download upstream source fixed at v0.5.6
+        shell: pwsh
+        run: git clone --depth 1 --branch v0.5.6 https://github.com/mbezruchko/Snowhush.git snowhush
+
+      - name: Apply Rainhush PiiWii 0.5.9 rain patch
+        shell: pwsh
+        run: python rainhush/patch_rainhush.py snowhush
+
+      - name: Apply subtle taskbar-edge puddles
+        shell: pwsh
+        run: python rainhush/patch_rainhush_puddles.py snowhush
+
+      - name: Install Rust Windows toolchain
+        shell: pwsh
+        run: |
+          rustup default stable
+          rustup target add x86_64-pc-windows-msvc
+          cargo --version
+
+      - name: Build native Windows Snowhush executable
+        shell: pwsh
+        working-directory: snowhush/windows
+        run: cargo build --release --target x86_64-pc-windows-msvc --bin Snowhush
+
+      - name: Build standalone Windows Setup EXE embedding the app
+        shell: pwsh
+        working-directory: snowhush/windows
+        run: |
+          $env:SNOWHUSH_APP = (Resolve-Path "target\x86_64-pc-windows-msvc\release\Snowhush.exe").Path
+          cargo build --release --target x86_64-pc-windows-msvc --bin Snowhush-Setup --features setup
+
+      - name: Package full installable EXE and patched sources
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\sources\windows | Out-Null
+          Copy-Item snowhush\windows\src dist\sources\windows\src -Recurse
+          Copy-Item snowhush\windows\assets dist\sources\windows\assets -Recurse
+          foreach ($f in @("Cargo.toml","Cargo.lock","build.rs","build.sh","rustfmt.toml")) {
+            Copy-Item "snowhush\windows\$f" "dist\sources\windows\$f"
+          }
+          Copy-Item snowhush\LICENSE dist\sources\LICENSE
+          Copy-Item snowhush\README.md dist\sources\README.md
+          Copy-Item rainhush\patch_rainhush.py dist\sources\patch_rainhush.py
+          Copy-Item rainhush\patch_rainhush_puddles.py dist\sources\patch_rainhush_puddles.py
+          Copy-Item snowhush\windows\target\x86_64-pc-windows-msvc\release\Snowhush-Setup.exe dist\Rainhush-PiiWii-0.5.9-Setup.exe
+          Copy-Item snowhush\windows\target\x86_64-pc-windows-msvc\release\Snowhush.exe dist\Rainhush-PiiWii-0.5.9.exe
+          Compress-Archive -Path dist\sources -DestinationPath dist\Rainhush-PiiWii-0.5.9-Sources.zip -CompressionLevel Optimal
+          Remove-Item dist\sources -Recurse -Force
+          $output = @()
+          foreach ($f in @("Rainhush-PiiWii-0.5.9-Setup.exe","Rainhush-PiiWii-0.5.9.exe","Rainhush-PiiWii-0.5.9-Sources.zip")) {
+            $hash=(Get-FileHash "dist\$f" -Algorithm SHA256).Hash.ToLower()
+            $output += "$hash  $f"
+          }
+          $output | Set-Content dist\SHA256SUMS.txt
+          Get-Content dist\SHA256SUMS.txt
+
+      - name: Upload installable artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rainhush-PiiWii-0.5.9
+          path: dist/*
+          retention-days: 30
+          if-no-files-found: error
