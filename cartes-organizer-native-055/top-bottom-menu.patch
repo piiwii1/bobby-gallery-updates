@@ -1,0 +1,76 @@
+diff -ruN a/app/build.gradle b/app/build.gradle
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -6,8 +6,8 @@
+         applicationId 'ch.piiwii.cartesorganizer'
+         minSdk 29
+         targetSdk 35
+-        versionCode 22
+-        versionName '0.4.14'
++        versionCode 23
++        versionName '0.4.15'
+     }
+     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ }
+diff -ruN a/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java b/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+--- a/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
++++ b/app/src/main/java/ch/piiwii/cartesorganizer/MainActivity.java
+@@ -344,16 +344,34 @@
+     private JSONObject friend(int id){JSONArray x=a("friends");for(int i=0;i<x.length();i++){JSONObject f=item(x,i);if(f!=null&&f.optInt("id")==id)return f;}return null;}
+     private JSONObject currentCopy(int friendId,int slot){JSONArray x=a("copies");for(int i=0;i<x.length();i++){JSONObject c=item(x,i);if(c!=null&&c.optInt("friend_id")==friendId&&c.optInt("slot_no")==slot&&"with_friend".equals(c.optString("status")))return c;}return null;}
+     private boolean alive(JSONObject c){return c!=null&&c.isNull("deleted_at");}
++    // Header actions follow the existing 0.4.14 navigation palette. No actions change.
+     private TextView iconButton(String glyph, int color, Runnable click){
+-        TextView t=text(glyph,23,color);t.setGravity(Gravity.CENTER);t.setBackground(panelShape(PANEL,13));
++        TextView t=text(glyph,23,color);t.setGravity(Gravity.CENTER);
++        android.graphics.drawable.GradientDrawable skin=new android.graphics.drawable.GradientDrawable(
++            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
++            new int[]{Color.rgb(24,58,89),Color.rgb(13,35,55)});
++        skin.setCornerRadius(dp(13));
++        skin.setStroke(dp(1),Color.rgb(51,119,171));
++        t.setBackground(new android.graphics.drawable.RippleDrawable(
++            android.content.res.ColorStateList.valueOf(Color.rgb(46,94,132)),skin,null));
++        t.setElevation(dp(1));
+         t.setOnClickListener(v->click.run());return t;
+     }
+     private void toolbar(String label){
+         LinearLayout top=row();top.setGravity(Gravity.CENTER_VERTICAL);
++        top.setPadding(dp(2),dp(2),dp(3),dp(2));
++        android.graphics.drawable.GradientDrawable topSkin=new android.graphics.drawable.GradientDrawable(
++            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
++            new int[]{Color.rgb(18,39,60),Color.rgb(9,24,39)});
++        topSkin.setCornerRadius(dp(19));
++        topSkin.setStroke(dp(1),Color.rgb(43,70,92));
++        top.setBackground(topSkin);top.setElevation(dp(2));
+         ImageView menuLogo=new ImageView(this);menuLogo.setImageResource(R.drawable.cartes_icon);
+         menuLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+         menuLogo.setContentDescription("Ouvrir le menu");
+-        menuLogo.setPadding(dp(0),dp(1),dp(0),dp(1));
++        menuLogo.setPadding(0,dp(1),0,dp(1));
++        // Move only the original logo left; do not replace or distort it.
++        menuLogo.setTranslationX(-dp(7));
+         menuLogo.setOnClickListener(v->showMenu());
+         top.addView(menuLogo,lp(103,58));
+         TextView name=heading("Cartes Organizer",16);
+@@ -586,7 +604,11 @@
+
+ private void renderHome(){
+     if(state==null)return;
+-    startScreen();toolbar("Accueil");
++    startScreen();
++    // Give the bottom bar 8dp more room toward Android's navigation bar.
++    // Scoped to the home screen; all other screens retain their existing layout.
++    root.setPadding(dp(12),dp(10),dp(12),dp(4));
++    toolbar("Accueil");
+     JSONArray cards=a("cards"),friends=a("friends");
+     ArrayList<JSONObject> flyers=new ArrayList<>(),pending=new ArrayList<>(),contacts=new ArrayList<>();
+     for(int i=0;i<cards.length();i++){
+@@ -680,7 +702,7 @@
+         tab.setOnClickListener(v->{homePageIndex=idx;pager.smoothScrollTo(idx*pageWidth,0);stylePagerTabs(nav,idx);});
+     }
+     LinearLayout.LayoutParams footerParams=lp(-1,78);
+-    footerParams.setMargins(dp(1),dp(6),dp(1),dp(2));
++    footerParams.setMargins(dp(1),dp(6),dp(1),0);
+     root.addView(footer,footerParams);
+     pager.setOnTouchListener((v,e)->{
+         if(e.getAction()==MotionEvent.ACTION_UP||e.getAction()==MotionEvent.ACTION_CANCEL){
