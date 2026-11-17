@@ -1,0 +1,33 @@
+name: CaR Story 1.0.66 public APK delivery
+on:
+  push:
+    branches:
+      - carstory-v1.0.66-direct-delivery
+    paths:
+      - carstory-transfer/**
+      - .github/workflows/carstory-direct-apk.yml
+permissions:
+  contents: write
+jobs:
+  reconstruct:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: carstory-v1.0.66-direct-delivery
+      - name: Reconstruct and verify exact signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p carstory-download
+          cat carstory-transfer/chunk-* | base64 --decode > carstory-download/CaRStory-v1.0.66-signed.apk
+          echo '5eb4356d39e6a3199fde1453ae4657325776aae2131f9cd7e02e944dc2499151  carstory-download/CaRStory-v1.0.66-signed.apk' | sha256sum -c -
+          test "$(stat -c%s carstory-download/CaRStory-v1.0.66-signed.apk)" = '5513541'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add carstory-download/CaRStory-v1.0.66-signed.apk
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add byte-verified signed CaR Story v1.0.66 APK'
+            git push origin HEAD:carstory-v1.0.66-direct-delivery
+          fi
