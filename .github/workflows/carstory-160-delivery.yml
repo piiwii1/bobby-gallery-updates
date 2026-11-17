@@ -1,0 +1,30 @@
+name: CaR Story 1.0.60 signed APK delivery
+on:
+  push:
+    branches: [delivery/car-story-1.0.60]
+    paths:
+      - 'carstory160-parts/**'
+      - '.github/workflows/carstory-160-delivery.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore and verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat carstory160-parts/part-0 carstory160-parts/part-1 carstory160-parts/part-2 carstory160-parts/part-3 > /tmp/carstory-160.apk
+          test "$(wc -c < /tmp/carstory-160.apk)" -eq 4378153
+          echo "a127f7bd70446e4499a1e1de572b47bc573df8943ff30ccfcb74735516c34733  /tmp/carstory-160.apk" | sha256sum -c -
+          mkdir -p downloads
+          cp /tmp/carstory-160.apk downloads/CaR-Story-v1.0.60-APK.apk
+          sha256sum downloads/CaR-Story-v1.0.60-APK.apk > downloads/CaR-Story-v1.0.60-SHA256.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add downloads/CaR-Story-v1.0.60-APK.apk downloads/CaR-Story-v1.0.60-SHA256.txt
+          git commit -m 'Publish signed CaR Story 1.0.60 APK as public direct download'
+          git push origin HEAD:delivery/car-story-1.0.60
