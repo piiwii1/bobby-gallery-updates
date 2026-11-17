@@ -1,0 +1,31 @@
+name: CaR Story 1.0.58 APK delivery
+on:
+  push:
+    branches: [delivery/car-story-1.0.58]
+    paths:
+      - 'carstory-parts/**'
+      - '.github/workflows/carstory-158-delivery.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore verified signed APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat carstory-parts/part-0 carstory-parts/part-1 carstory-parts/part-2 > /tmp/carstory-158.apk
+          test "$(wc -c < /tmp/carstory-158.apk)" -eq 4044922
+          echo "06e7bb1e25bf1fc0638866997627a043c43c41662ca0faf5fe46360774fe726e  /tmp/carstory-158.apk" | sha256sum -c -
+          mkdir -p downloads
+          cp /tmp/carstory-158.apk downloads/CaR-Story-v1.0.58-APK.apk
+          sha256sum downloads/CaR-Story-v1.0.58-APK.apk > downloads/SHA256.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add downloads
+          git commit -m 'Publish verified CaR Story 1.0.58 APK for direct download'
+          git push origin HEAD:delivery/car-story-1.0.58
