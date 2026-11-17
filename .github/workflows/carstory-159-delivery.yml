@@ -1,0 +1,28 @@
+name: CaR Story 1.0.59 Verified APK
+on:
+  push:
+    branches: [delivery/car-story-1.0.59]
+    paths: ['carstory-159-parts/**','.github/workflows/carstory-159-delivery.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore and verify actual compiled APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat carstory-159-parts/part-0 carstory-159-parts/part-1 carstory-159-parts/part-2 carstory-159-parts/part-3 > /tmp/CaR-Story-v1.0.59-APK.apk
+          test "$(wc -c < /tmp/CaR-Story-v1.0.59-APK.apk)" -eq 4484202
+          echo '157f24f0b331f1101e5c6e7464b5ee09c5b59b3fda92c0b872a4cc6f73730d27  /tmp/CaR-Story-v1.0.59-APK.apk' | sha256sum --check
+          mkdir -p downloads
+          cp /tmp/CaR-Story-v1.0.59-APK.apk downloads/CaR-Story-v1.0.59-APK.apk
+          sha256sum downloads/CaR-Story-v1.0.59-APK.apk > downloads/CaR-Story-v1.0.59-APK.sha256
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add downloads/CaR-Story-v1.0.59-APK.apk downloads/CaR-Story-v1.0.59-APK.sha256
+          git commit -m 'Deliver validated CaR Story 1.0.59 APK' || true
+          git push origin HEAD:delivery/car-story-1.0.59
