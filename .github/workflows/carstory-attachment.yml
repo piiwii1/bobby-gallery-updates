@@ -1,0 +1,23 @@
+name: CaR Story signed APK downloadable attachment
+on:
+  push:
+    branches: [carstory-v1.0.66-direct-delivery]
+    paths: ['.github/workflows/carstory-attachment.yml']
+permissions:
+  contents: read
+jobs:
+  delivery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify signed APK integrity
+        run: |
+          set -euo pipefail
+          echo '5eb4356d39e6a3199fde1453ae4657325776aae2131f9cd7e02e944dc2499151  carstory-download/CaRStory-v1.0.66-signed.apk' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CaRStory-v1.0.66-signed
+          path: carstory-download/CaRStory-v1.0.66-signed.apk
+          retention-days: 2
+          compression-level: 0
